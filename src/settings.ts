@@ -2,6 +2,20 @@ import type { App } from "obsidian";
 import { Setting, PluginSettingTab } from "obsidian";
 import type RealTimeSync from "../main";
 
+export interface PluginSettings {
+	domain: string;
+	https: boolean;
+	workspaceName: string;
+	workspacePass: string;
+}
+
+export const DEFAULT_SETTINGS: PluginSettings = {
+	domain: "127.0.0.1:8080",
+	https: false,
+	workspaceName: "",
+	workspacePass: "",
+};
+
 export class SettingTab extends PluginSettingTab {
 	plugin: RealTimeSync;
 
@@ -20,13 +34,20 @@ export class SettingTab extends PluginSettingTab {
 			.setDesc("Server to connect")
 			.addText((text) =>
 				text
-					.setPlaceholder("http://127.0.0.1:8080")
-					.setValue(this.plugin.settings.serverURL)
+					.setPlaceholder("127.0.0.1:8080")
+					.setValue(this.plugin.settings.domain)
 					.onChange(async (value) => {
-						this.plugin.settings.serverURL = value;
+						this.plugin.settings.domain = value;
 						await this.plugin.saveSettings();
 					}),
 			);
+
+		new Setting(containerEl).setName("HTTPS").addToggle((toggle) =>
+			toggle.onChange(async (value) => {
+				this.plugin.settings.https = value;
+				await this.plugin.saveSettings();
+			}),
+		);
 
 		new Setting(containerEl)
 			.setName("Workspace name")

@@ -13,8 +13,12 @@ export class ApiClient {
 	private basePath: string;
 	private defaultHeaders: Record<string, string>;
 
-	constructor(basePath: string, defaultHeaders: Record<string, string> = {}) {
-		this.basePath = basePath;
+	constructor(
+		scheme: "http" | "https",
+		domain: string,
+		defaultHeaders: Record<string, string> = {},
+	) {
+		this.basePath = `${scheme}://${domain}`;
 		this.defaultHeaders = {
 			"Content-Type": "application/json",
 			...defaultHeaders,
@@ -38,7 +42,7 @@ export class ApiClient {
 		const data = response.ok ? await response.json() : await response.text();
 
 		if (!response.ok) {
-			throw new Error(`Error: ${status} - ${data}`);
+			throw new Error(`Error: ${status} - ${data} `);
 		}
 
 		return { data: data as T, status };

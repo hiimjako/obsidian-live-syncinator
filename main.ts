@@ -1,38 +1,45 @@
 import { Notice, Plugin } from "obsidian";
-import type { App, PluginManifest } from "obsidian";
-import { SettingTab } from "./src/settings";
+import type { App, PluginManifest, TAbstractFile } from "obsidian";
+import {
+	DEFAULT_SETTINGS,
+	SettingTab,
+	type PluginSettings,
+} from "./src/settings";
 import { ApiClient } from "src/api";
 import { Auth } from "src/auth";
-
-// Remember to rename these classes and interfaces!
-
-interface MyPluginSettings {
-	serverURL: string;
-	workspaceName: string;
-	workspacePass: string;
-}
-
-const DEFAULT_SETTINGS: MyPluginSettings = {
-	serverURL: "http://127.0.0.1:8080",
-	workspaceName: "",
-	workspacePass: "",
-};
+import { WsClient } from "src/ws";
 
 export default class RealTimeSync extends Plugin {
-	settings: MyPluginSettings = DEFAULT_SETTINGS;
+	settings: PluginSettings = DEFAULT_SETTINGS;
 	private statusBar: HTMLElement;
 	private uploadingFiles = 0;
 	private downloadingFiles = 0;
 	private apiClient: ApiClient;
+	private wsClient: WsClient;
 
 	constructor(app: App, manifest: PluginManifest) {
 		super(app, manifest);
 		this.statusBar = this.addStatusBarItem();
-		this.apiClient = new ApiClient(this.settings.serverURL, {});
+		this.apiClient = new ApiClient(
+			this.settings.https ? "https" : "http",
+			this.settings.domain,
+			{},
+		);
+		this.wsClient = new WsClient(this.settings.domain, {
+			onError(err) {
+				console.error(err);
+			},
+			onMessage(data) {
+				console.log(data);
+			},
+		});
 	}
 
 	async onload() {
 		await this.loadSettings();
+		// This adds a settings tab so the user can configure various aspects of the plugin
+		this.addSettingTab(new SettingTab(this.app, this));
+
 		this.updateStatusBar();
 
 		new Notice("Real time sync inizialized");
@@ -48,22 +55,47 @@ export default class RealTimeSync extends Plugin {
 			console.log(error);
 		}
 
-		// This adds a settings tab so the user can configure various aspects of the plugin
-		this.addSettingTab(new SettingTab(this.app, this));
-
 		// If the plugin hooks up any global DOM events (on parts of the app that doesn't belong to this plugin)
 		// Using this function will automatically remove the event listener when this plugin is disabled.
-		this.registerDomEvent(document, "click", (evt: MouseEvent) => {
+		this.registerDomEvent(document, "keypress", (evt: KeyboardEvent) => {
 			console.log("click", evt);
+
+			// const view = this.app.workspace.getActiveViewOfType(MarkdownView);
+			// if (view) {
+			// 	const cursor = view.editor.getCursor();
+			// 	view.editor.replaceRange("ciao", cursor);
+			// 	console.log(cursor);
+			// }
 		});
 
-		// When registering intervals, this function will automatically clear the interval when the plugin is disabled.
-		// this.registerInterval(
-		// 	window.setInterval(() => this.addUploadingFiles(1), 1 * 1000),
-		// );
+		this.registerEvent(
+			this.app.vault.on("create", (file: TAbstractFile) => {
+				console.log("create", file);
+			}),
+		);
+
+		this.registerEvent(
+			this.app.vault.on("modify", (file: TAbstractFile) => {
+				console.log("modify", file);
+			}),
+		);
+
+		this.registerEvent(
+			this.app.vault.on("delete", (file: TAbstractFile) => {
+				console.log("delete", file);
+			}),
+		);
+
+		this.registerEvent(
+			this.app.vault.on("rename", (file: TAbstractFile, oldPath: string) => {
+				console.log("rename", file, oldPath);
+			}),
+		);
 	}
 
-	onunload() {}
+	onunload() {
+		this.wsClient.close();
+	}
 
 	async loadSettings() {
 		this.settings = Object.assign({}, this.settings, await this.loadData());
