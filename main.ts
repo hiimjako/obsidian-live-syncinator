@@ -17,6 +17,7 @@ export default class RealTimeSync extends Plugin {
 	private downloadingFiles = 0;
 	private httpClient: HttpClient;
 	private wsClient: WsClient;
+	private filePathToId: Map<string, number> = new Map();
 
 	constructor(app: App, manifest: PluginManifest) {
 		super(app, manifest);
@@ -50,6 +51,15 @@ export default class RealTimeSync extends Plugin {
 		}
 	}
 
+	private async fetchFiles() {
+		const apiClient = new ApiClient(this.httpClient);
+		const files = await apiClient.fetchFiles();
+
+		for (const file of files) {
+			this.filePathToId.set(file.workspace_path, file.id);
+		}
+	}
+
 	async onload() {
 		await this.loadSettings();
 
@@ -58,8 +68,7 @@ export default class RealTimeSync extends Plugin {
 			window.setInterval(async () => await this.refreshToken(), 5 * 60 * 1000),
 		);
 
-		const apiClient = new ApiClient(this.httpClient);
-		console.log(await apiClient.fetchFiles());
+		await this.fetchFiles();
 
 		this.addSettingTab(new SettingTab(this.app, this));
 
@@ -69,9 +78,14 @@ export default class RealTimeSync extends Plugin {
 
 		this.registerEvent(
 			this.app.vault.on("create", async (file: TAbstractFile) => {
+				if (this.filePathToId.has(file.path)) {
+					return;
+				}
+
 				try {
+					const apiClient = new ApiClient(this.httpClient);
 					const fileApi = await apiClient.createFile(file.path, "");
-					console.log(fileApi);
+					this.filePathToId.set(fileApi.workspace_path, fileApi.id);
 				} catch (error) {
 					console.error(error);
 				}
@@ -85,8 +99,20 @@ export default class RealTimeSync extends Plugin {
 		);
 
 		this.registerEvent(
-			this.app.vault.on("delete", (file: TAbstractFile) => {
-				console.log("delete", file);
+			this.app.vault.on("delete", async (file: TAbstractFile) => {
+				const fileId = this.filePathToId.get(file.path);
+				if (!fileId) {
+					console.error(`missing file for deletion: ${file.path}`);
+					return;
+				}
+
+				try {
+					const apiClient = new ApiClient(this.httpClient);
+					await apiClient.deleteFile(fileId);
+					this.filePathToId.delete(file.path);
+				} catch (error) {
+					console.error(error);
+				}
 			}),
 		);
 

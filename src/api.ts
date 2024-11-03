@@ -65,7 +65,7 @@ export class ApiClient {
 	async deleteFile(fileId: number): Promise<void> {
 		const res = await this.client.delete(`/v1/api/file/${fileId}`);
 
-		if (res.status !== StatusCodes.OK) {
+		if (res.status !== StatusCodes.NO_CONTENT) {
 			throw new Error(`error while deleting file: ${res.data}`);
 		}
 	}
