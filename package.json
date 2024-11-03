@@ -15,23 +15,22 @@
 	"devDependencies": {
 		"@tsconfig/svelte": "^5.0.4",
 		"@types/diff": "^6.0.0",
-		"@types/node": "^16.11.6",
+		"@types/node": "^16.18.119",
 		"@types/ws": "^8.5.13",
-		"@typescript-eslint/eslint-plugin": "5.29.0",
-		"@typescript-eslint/parser": "5.29.0",
-		"builtin-modules": "3.3.0",
-		"esbuild": "0.17.3",
+		"@typescript-eslint/eslint-plugin": "^5.62.0",
+		"@typescript-eslint/parser": "^5.62.0",
+		"builtin-modules": "^3.3.0",
+		"esbuild": "^0.17.19",
 		"esbuild-svelte": "^0.8.2",
-		"obsidian": "latest",
+		"obsidian": "^1.7.2",
 		"svelte": "^5.1.9",
 		"svelte-preprocess": "^6.0.3",
-		"tslib": "2.4.0",
+		"tslib": "^2.8.1",
 		"tsx": "^4.19.2",
 		"typescript": "^5.6.3"
 	},
 	"dependencies": {
 		"diff": "^7.0.0",
-		"http-status-codes": "^2.3.0",
-		"ws": "^8.18.0"
+		"http-status-codes": "^2.3.0"
 	}
 }
