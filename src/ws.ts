@@ -1,25 +1,13 @@
-import WebSocket from "ws";
+import type { DiffChunk } from "./diff";
 
-enum Operation {
-	DiffRemove = -1,
-	DiffAdd = 1,
-}
-
-type DiffChunk = {
-	Type: Operation;
-	Position: number;
-	Text: string;
-	Len: number;
-};
-
-type DiffChunkMessage = {
+export type DiffChunkMessage = {
 	fileId: string;
 	chunks: DiffChunk[];
 };
 
 interface WsEvents {
 	onMessage: (_: DiffChunkMessage) => void;
-	onError: (_: Error) => void;
+	onError: (_: Event) => void;
 }
 
 export class WsClient {
@@ -28,13 +16,25 @@ export class WsClient {
 	constructor(domain: string, events: WsEvents) {
 		this.ws = new WebSocket(`ws://${domain}/v1/sync`);
 
-		this.ws.on("error", events.onError);
+		this.ws.addEventListener("error", events.onError);
 
-		this.ws.on("message", function message(data) {
-			console.log("received: %s", data);
-			const msg = JSON.parse(data.toString());
-			events.onMessage(msg);
+		this.ws.addEventListener("close", (event) => {
+			if (!event.wasClean) {
+				events.onError(new Event("WebSocket closed unexpectedly"));
+			}
 		});
+
+		this.ws.addEventListener(
+			"message",
+			function message(event: MessageEvent<DiffChunkMessage>) {
+				try {
+					const msg = JSON.parse(event.data.toString());
+					events.onMessage(msg);
+				} catch (err) {
+					console.error(err);
+				}
+			},
+		);
 	}
 
 	sendMessage(msg: DiffChunkMessage) {
