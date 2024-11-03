@@ -5,23 +5,24 @@ import {
 	SettingTab,
 	type PluginSettings,
 } from "./src/settings";
-import { ApiClient } from "src/api";
 import { Auth } from "src/auth";
 import { WsClient } from "src/ws";
+import { HttpClient } from "src/http";
+import { ApiClient } from "src/api";
 
 export default class RealTimeSync extends Plugin {
 	settings: PluginSettings = DEFAULT_SETTINGS;
 	private statusBar: HTMLElement;
 	private uploadingFiles = 0;
 	private downloadingFiles = 0;
-	private apiClient: ApiClient;
+	private httpClient: HttpClient;
 	private wsClient: WsClient;
 
 	constructor(app: App, manifest: PluginManifest) {
 		super(app, manifest);
 		this.statusBar = this.addStatusBarItem();
 
-		this.apiClient = new ApiClient(
+		this.httpClient = new HttpClient(
 			this.settings.https ? "https" : "http",
 			this.settings.domain,
 			{},
@@ -37,13 +38,13 @@ export default class RealTimeSync extends Plugin {
 	}
 
 	private async refreshToken() {
-		const auth = new Auth(this.apiClient);
+		const auth = new Auth(this.httpClient);
 		try {
 			const res = await auth.login(
 				this.settings.workspaceName,
 				this.settings.workspacePass,
 			);
-			this.apiClient.setAuthorizationHeader(res.token);
+			this.httpClient.setAuthorizationHeader(res.token);
 		} catch (error) {
 			console.error(error);
 		}
@@ -52,10 +53,13 @@ export default class RealTimeSync extends Plugin {
 	async onload() {
 		await this.loadSettings();
 
-		this.refreshToken();
+		await this.refreshToken();
 		this.registerInterval(
 			window.setInterval(async () => await this.refreshToken(), 5 * 60 * 1000),
 		);
+
+		const apiClient = new ApiClient(this.httpClient);
+		console.log(await apiClient.fetchFiles());
 
 		this.addSettingTab(new SettingTab(this.app, this));
 
@@ -63,22 +67,14 @@ export default class RealTimeSync extends Plugin {
 
 		new Notice("Real time sync inizialized");
 
-		// If the plugin hooks up any global DOM events (on parts of the app that doesn't belong to this plugin)
-		// Using this function will automatically remove the event listener when this plugin is disabled.
-		this.registerDomEvent(document, "keypress", (evt: KeyboardEvent) => {
-			console.log("click", evt);
-
-			// const view = this.app.workspace.getActiveViewOfType(MarkdownView);
-			// if (view) {
-			// 	const cursor = view.editor.getCursor();
-			// 	view.editor.replaceRange("ciao", cursor);
-			// 	console.log(cursor);
-			// }
-		});
-
 		this.registerEvent(
-			this.app.vault.on("create", (file: TAbstractFile) => {
-				console.log("create", file);
+			this.app.vault.on("create", async (file: TAbstractFile) => {
+				try {
+					const fileApi = await apiClient.createFile(file.path, "");
+					console.log(fileApi);
+				} catch (error) {
+					console.error(error);
+				}
 			}),
 		);
 

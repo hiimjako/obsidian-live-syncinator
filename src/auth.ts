@@ -1,5 +1,5 @@
 import { StatusCodes } from "http-status-codes";
-import type { ApiClient } from "./api";
+import type { HttpClient } from "./http";
 
 interface WorkspaceCredentials {
 	name: string;
@@ -11,8 +11,8 @@ interface AuthToken {
 }
 
 export class Auth {
-	private client: ApiClient;
-	constructor(client: ApiClient) {
+	private client: HttpClient;
+	constructor(client: HttpClient) {
 		this.client = client;
 	}
 
@@ -21,9 +21,10 @@ export class Auth {
 
 		const res = await this.client.post<AuthToken>("/v1/auth/login", wc);
 
-		console.log(res);
 		if (res.status !== StatusCodes.OK) {
-			throw new Error(`invalid credentials for workspace ${wc.name}`);
+			throw new Error(
+				`invalid credentials for workspace ${wc.name}: ${res.data}`,
+			);
 		}
 
 		return res.data;

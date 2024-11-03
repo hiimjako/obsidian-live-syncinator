@@ -1,80 +1,72 @@
-enum HttpMethod {
-	GET = "GET",
-	POST = "POST",
-	DELETE = "DELETE",
+import { StatusCodes } from "http-status-codes";
+import type { HttpClient } from "./http";
+
+declare interface File {
+	id: number;
+	disk_path: string;
+	workspace_path: string;
+	mime_type: string;
+	hash: string;
+	created_at: string;
+	updated_at: string;
+	workspace_id: number;
 }
 
-type FetchResponse<T> = {
-	data: T;
-	status: number;
-};
+declare interface FileWithContent extends File {
+	content: string;
+}
+
+declare interface CreateFile {
+	path: string;
+	content: string;
+}
 
 export class ApiClient {
-	private basePath: string;
-	private defaultHeaders: Record<string, string>;
-
-	constructor(
-		scheme: "http" | "https",
-		domain: string,
-		defaultHeaders: Record<string, string> = {},
-	) {
-		this.basePath = `${scheme}://${domain}`;
-		this.defaultHeaders = {
-			"Content-Type": "application/json",
-			...defaultHeaders,
-		};
+	private client: HttpClient;
+	constructor(client: HttpClient) {
+		this.client = client;
 	}
 
-	private async request<T>(
-		endpoint: string,
-		options: RequestInit = {},
-	): Promise<FetchResponse<T>> {
-		const url = new URL(endpoint, this.basePath).toString();
-		const response = await fetch(url, {
-			...options,
-			headers: {
-				...this.defaultHeaders,
-				...options.headers,
-			},
-		});
+	async fetchFiles(): Promise<File[]> {
+		const res = await this.client.get<File[]>("/v1/api/file");
 
-		const status = response.status;
-		const data = response.ok ? await response.json() : await response.text();
-
-		if (!response.ok) {
-			throw new Error(`Error: ${status} - ${data} `);
+		if (res.status !== StatusCodes.OK) {
+			throw new Error(`error while fetching files: ${res.data}`);
 		}
 
-		return { data: data as T, status };
+		return res.data;
 	}
 
-	public setAuthorizationHeader(token: string) {
-		this.defaultHeaders.Authorization = `Bearer ${token}`;
+	// async fetchFile(name: string, password: string): Promise<FileWithContent> {
+	// 	const wc: WorkspaceCredentials = { name, password };
+	//
+	// 	const res = await this.client.post<AuthToken>("/v1/auth/login", wc);
+	//
+	// 	console.log(res);
+	// 	if (res.status !== StatusCodes.OK) {
+	// 		throw new Error(`invalid credentials for workspace ${wc.name}`);
+	// 	}
+	//
+	// 	return res.data;
+	// }
+
+	async createFile(path: string, content: string): Promise<File> {
+		const body: CreateFile = { path, content };
+
+		const res = await this.client.post<File>("/v1/api/file", body);
+
+		if (res.status !== StatusCodes.CREATED) {
+			throw new Error(`error while creating file: ${res.data}`);
+		}
+
+		return res.data;
 	}
 
-	public get<T>(
-		endpoint: string,
-		headers: Record<string, string> = {},
-	): Promise<FetchResponse<T>> {
-		return this.request<T>(endpoint, { method: HttpMethod.GET, headers });
-	}
+	async deleteFile(fileId: number): Promise<void> {
+		const res = await this.client.delete(`/v1/api/file/${fileId}`);
 
-	public post<T>(
-		endpoint: string,
-		body: object,
-		headers: Record<string, string> = {},
-	): Promise<FetchResponse<T>> {
-		return this.request<T>(endpoint, {
-			method: HttpMethod.POST,
-			headers,
-			body: JSON.stringify(body),
-		});
-	}
-
-	public delete<T>(
-		endpoint: string,
-		headers: Record<string, string> = {},
-	): Promise<FetchResponse<T>> {
-		return this.request<T>(endpoint, { method: HttpMethod.DELETE, headers });
+		if (res.status !== StatusCodes.OK) {
+			throw new Error(`error while deleting file: ${res.data}`);
+		}
 	}
 }
