@@ -117,9 +117,36 @@ export default class RealTimeSync extends Plugin {
 		);
 
 		this.registerEvent(
-			this.app.vault.on("rename", (file: TAbstractFile, oldPath: string) => {
-				console.log("rename", file, oldPath);
-			}),
+			this.app.vault.on(
+				"rename",
+				async (file: TAbstractFile, oldPath: string) => {
+					const oldFileId = this.filePathToId.get(oldPath);
+					if (!oldFileId) {
+						console.error(`missing file for rename: ${oldPath}`);
+						return;
+					}
+
+					const apiClient = new ApiClient(this.httpClient);
+
+					try {
+						await apiClient.deleteFile(oldFileId);
+						this.filePathToId.delete(file.path);
+					} catch (error) {
+						console.error(error);
+					}
+
+					if (this.filePathToId.has(file.path)) {
+						return;
+					}
+
+					try {
+						const fileApi = await apiClient.createFile(file.path, "");
+						this.filePathToId.set(fileApi.workspace_path, fileApi.id);
+					} catch (error) {
+						console.error(error);
+					}
+				},
+			),
 		);
 	}
 
