@@ -39,7 +39,14 @@ export class HttpClient {
 		});
 
 		const status = response.status;
-		const data = response.ok ? await response.json() : await response.text();
+
+		let data: unknown;
+		const contentType = response.headers.get("Content-Type");
+		if (response.ok && contentType?.includes("application/json")) {
+			data = await response.json();
+		} else {
+			data = await response.text();
+		}
 
 		if (!response.ok) {
 			throw new Error(`Error: ${status} - ${data} `);

@@ -34,7 +34,7 @@ export class ApiClient {
 			throw new Error(`error while fetching files: ${res.data}`);
 		}
 
-		return res.data;
+		return res.data ?? [];
 	}
 
 	// async fetchFile(name: string, password: string): Promise<FileWithContent> {
@@ -59,7 +59,7 @@ export class ApiClient {
 			throw new Error(`error while creating file: ${res.data}`);
 		}
 
-		return res.data;
+		return res.data ?? {};
 	}
 
 	async deleteFile(fileId: number): Promise<void> {
