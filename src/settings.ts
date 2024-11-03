@@ -36,16 +36,14 @@ export class SettingTab extends PluginSettingTab {
 				text
 					.setPlaceholder("127.0.0.1:8080")
 					.setValue(this.plugin.settings.domain)
-					.onChange(async (value) => {
+					.onChange((value) => {
 						this.plugin.settings.domain = value;
-						await this.plugin.saveSettings();
 					}),
 			);
 
 		new Setting(containerEl).setName("HTTPS").addToggle((toggle) =>
-			toggle.onChange(async (value) => {
+			toggle.onChange((value) => {
 				this.plugin.settings.https = value;
-				await this.plugin.saveSettings();
 			}),
 		);
 
@@ -56,9 +54,8 @@ export class SettingTab extends PluginSettingTab {
 				text
 					.setPlaceholder("workspace")
 					.setValue(this.plugin.settings.workspaceName)
-					.onChange(async (value) => {
+					.onChange((value) => {
 						this.plugin.settings.workspaceName = value;
-						await this.plugin.saveSettings();
 					}),
 			);
 
@@ -66,16 +63,19 @@ export class SettingTab extends PluginSettingTab {
 			.setName("Workspace password")
 			.setDesc("Remote workspace password")
 			.addText((text) =>
-				text
-					.setPlaceholder("********")
-					.setValue(maskString(this.plugin.settings.workspacePass))
-					.onChange(async (value) => {
-						// text.setValue(maskString(value));
-						this.plugin.settings.workspacePass = value;
-						await this.plugin.saveSettings();
-					}),
+				text.setPlaceholder("********").onChange((value) => {
+					this.plugin.settings.workspacePass = value;
+				}),
 			);
+
+		new Setting(containerEl).addButton((button) =>
+			button
+				.setButtonText("save")
+				.setWarning()
+				.onClick(async () => {
+					console.log(this.plugin.settings);
+					await this.plugin.saveSettings();
+				}),
+		);
 	}
 }
-
-const maskString = (s: string) => "*".repeat(s.length);
