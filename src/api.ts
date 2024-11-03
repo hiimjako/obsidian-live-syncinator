@@ -48,6 +48,10 @@ export class ApiClient {
 		return { data: data as T, status };
 	}
 
+	public setAuthorizationHeader(token: string) {
+		this.defaultHeaders.Authorization = `Bearer ${token}`;
+	}
+
 	public get<T>(
 		endpoint: string,
 		headers: Record<string, string> = {},

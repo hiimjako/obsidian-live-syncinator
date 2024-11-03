@@ -20,6 +20,7 @@ export default class RealTimeSync extends Plugin {
 	constructor(app: App, manifest: PluginManifest) {
 		super(app, manifest);
 		this.statusBar = this.addStatusBarItem();
+
 		this.apiClient = new ApiClient(
 			this.settings.https ? "https" : "http",
 			this.settings.domain,
@@ -35,25 +36,32 @@ export default class RealTimeSync extends Plugin {
 		});
 	}
 
-	async onload() {
-		await this.loadSettings();
-		// This adds a settings tab so the user can configure various aspects of the plugin
-		this.addSettingTab(new SettingTab(this.app, this));
-
-		this.updateStatusBar();
-
-		new Notice("Real time sync inizialized");
-
+	private async refreshToken() {
 		const auth = new Auth(this.apiClient);
 		try {
 			const res = await auth.login(
 				this.settings.workspaceName,
 				this.settings.workspacePass,
 			);
-			console.log(res);
+			this.apiClient.setAuthorizationHeader(res.token);
 		} catch (error) {
-			console.log(error);
+			console.error(error);
 		}
+	}
+
+	async onload() {
+		await this.loadSettings();
+
+		this.refreshToken();
+		this.registerInterval(
+			window.setInterval(async () => await this.refreshToken(), 5 * 60 * 1000),
+		);
+
+		this.addSettingTab(new SettingTab(this.app, this));
+
+		this.updateStatusBar();
+
+		new Notice("Real time sync inizialized");
 
 		// If the plugin hooks up any global DOM events (on parts of the app that doesn't belong to this plugin)
 		// Using this function will automatically remove the event listener when this plugin is disabled.
