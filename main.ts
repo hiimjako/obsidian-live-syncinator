@@ -58,6 +58,7 @@ export default class RealTimeSync extends Plugin {
 		for (const file of files) {
 			this.filePathToId.set(file.workspace_path, file.id);
 		}
+		console.log(`fetched ${this.filePathToId.size} files from remote`);
 	}
 
 	async onload() {
@@ -69,6 +70,11 @@ export default class RealTimeSync extends Plugin {
 		);
 
 		await this.fetchFiles();
+
+		this.app.vault;
+		// await this.app.vault.createFolder("weilla/", "");
+		// await this.app.vault.create("weilla/pippo2.md", "pluto");
+		// await writeFile("foo", "bar", { encoding: "utf8" });
 
 		this.addSettingTab(new SettingTab(this.app, this));
 
