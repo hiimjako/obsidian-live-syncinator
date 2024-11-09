@@ -1,12 +1,13 @@
-import * as fs from "node:fs/promises";
 import * as path from "node:path";
-import { Operation, type DiffChunk } from "./diff";
-import type { Vault } from "obsidian";
+import { Operation, type DiffChunk } from "../diff";
+
+import type { TAbstractFile, Vault } from "obsidian";
 
 export class Disk {
 	private vault: Vault;
 
 	constructor(vault: Vault) {
+		vault.createFolder;
 		this.vault = vault;
 	}
 
@@ -15,7 +16,8 @@ export class Disk {
 	}
 
 	async createObject(vaultPath: string, content: string): Promise<void> {
-		if (await this.exists(vaultPath)) {
+		const exists = await this.exists(vaultPath);
+		if (exists) {
 			throw new Error("File already exists");
 		}
 
@@ -30,27 +32,26 @@ export class Disk {
 		await this.vault.adapter.write(vaultPath, content);
 	}
 
-	// async deleteObject(relativePath: string): Promise<void> {
-	// 	const diskPath = path.join(this.basepath, relativePath);
-	//
-	// 	try {
-	// 		await fs.stat(diskPath);
-	// 	} catch (err: unknown) {
-	// 		if (
-	// 			err instanceof Error &&
-	// 			(err as NodeJS.ErrnoException).code !== "ENOENT"
-	// 		) {
-	// 			throw err;
-	// 		}
-	// 	}
-	//
-	// 	await fs.unlink(diskPath);
-	// }
-	//
-	// async readObject(relativePath: string): Promise<Buffer> {
-	// 	const diskPath = path.join(this.basepath, relativePath);
-	// 	return fs.readFile(diskPath);
-	// }
+	async deleteObject(vaultPath: string): Promise<void> {
+		const file = this.vault.getFileByPath(vaultPath);
+		const folder = this.vault.getFolderByPath(vaultPath);
+
+		const toDelete: TAbstractFile | null = file ?? folder;
+		if (toDelete == null) {
+			throw new Error("File already exists");
+		}
+
+		await this.vault.delete(toDelete, true);
+	}
+
+	async readObject(vaultPath: string): Promise<string> {
+		const file = this.vault.getFileByPath(vaultPath);
+		if (file == null) {
+			throw new Error("File doesn't exists");
+		}
+		const v = await this.vault.cachedRead(file);
+		return v;
+	}
 
 	// async persistChunk(relativePath: string, chunk: DiffChunk): Promise<void> {
 	// 	const diskPath = path.join(this.basepath, relativePath);

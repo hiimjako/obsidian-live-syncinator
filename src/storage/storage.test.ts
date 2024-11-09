@@ -1,13 +1,22 @@
 import assert from "node:assert/strict";
-import { describe, it as test, afterEach, mock, type Mock } from "node:test";
+import { describe, it as test, afterEach, mock, beforeEach } from "node:test";
 import fs from "node:fs/promises";
-import { computeDiff } from "./diff";
-import { Disk } from "./storage";
-import { randomUUID } from "node:crypto";
-import { Vault } from "obsidian";
+import { computeDiff } from "../diff";
+import { Disk } from "../storage/storage";
+import { CreateVaultMock } from "../storage/storage.mock";
+import type { Vault } from "obsidian";
 
 describe("Disk storage integration tests", () => {
+	let v: Vault;
+	let vaultRootDir: string;
+
+	beforeEach(async () => {
+		vaultRootDir = await fs.mkdtemp("/tmp/storage_test");
+		v = CreateVaultMock(vaultRootDir);
+	});
+
 	afterEach(async () => {
+		await fs.rm(vaultRootDir, { recursive: true, force: true });
 		mock.restoreAll();
 	});
 
@@ -67,9 +76,11 @@ describe("Disk storage integration tests", () => {
 	// });
 
 	test("should create, read, and delete objects correctly", async (t) => {
-		const v = new Vault();
-
 		const createFolderMock = t.mock.method(v, "createFolder");
+		const getFileByPath = t.mock.method(v, "getFileByPath");
+		const getFolderByPath = t.mock.method(v, "getFolderByPath");
+		const cachedRead = t.mock.method(v, "cachedRead");
+		const del = t.mock.method(v, "delete");
 		const existsMock = t.mock.method(v.adapter, "exists");
 		const writeMock = t.mock.method(v.adapter, "write");
 
@@ -77,42 +88,32 @@ describe("Disk storage integration tests", () => {
 
 		const path = "foo/bar/baz.md";
 		const content = "hello";
-		// create object
-		const p = await d.createObject(path, content);
-		assert.ok(p);
 
-		assert.strictEqual(createFolderMock.mock.callCount(), 0);
-		assert.strictEqual(existsMock.mock.callCount(), 1);
+		await d.createObject(path, content);
+		assert.strictEqual(createFolderMock.mock.callCount(), 2);
+		assert.strictEqual(existsMock.mock.callCount(), 3);
 		assert.strictEqual(writeMock.mock.callCount(), 1);
 
 		// read object
-		// const fileContent = await d.readObject(p);
-		// assert.deepStrictEqual(fileContent, content);
-		//
-		// // delete object
-		// let filePath = path.join(d.basepath, p);
-		// await assert.doesNotReject(async () => {
-		// 	await fs.stat(filePath);
-		// });
-		//
-		// await assert.doesNotReject(async () => {
-		// 	await d.deleteObject(p);
-		// });
-		//
-		// await assert.rejects(
-		// 	async () => {
-		// 		await fs.stat(filePath);
-		// 	},
-		// 	(err: NodeJS.ErrnoException) => err.code === "ENOENT",
-		// );
-	});
-});
+		const fileContent = await d.readObject(path);
+		assert.deepStrictEqual(fileContent, content);
 
-describe("Disk storage utils test", () => {
+		assert.strictEqual(getFileByPath.mock.callCount(), 1);
+		assert.strictEqual(cachedRead.mock.callCount(), 1);
+
+		// delete object
+		await d.deleteObject(path);
+		assert.strictEqual(getFileByPath.mock.callCount(), 2);
+		assert.strictEqual(getFolderByPath.mock.callCount(), 1);
+		assert.strictEqual(del.mock.callCount(), 1);
+
+		assert.strictEqual(await d.exists(path), false);
+	});
+
 	describe("getIncrementalDirectories", () => {
 		test("should split a path", async () => {
 			const path = "./foo/bar/baz/test.md";
-			const splitted = new Disk(new Vault()).getIncrementalDirectories(path);
+			const splitted = new Disk(v).getIncrementalDirectories(path);
 
 			assert.deepEqual(splitted, ["./foo/", "./foo/bar/", "./foo/bar/baz/"]);
 		});
