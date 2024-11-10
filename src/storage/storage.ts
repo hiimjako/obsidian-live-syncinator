@@ -1,7 +1,7 @@
 import path from "path-browserify";
 import { Operation, type DiffChunk } from "../diff";
 
-import type { TAbstractFile, Vault } from "obsidian";
+import type { TAbstractFile, TFile, Vault } from "obsidian";
 
 export class Disk {
 	private vault: Vault;
@@ -44,11 +44,20 @@ export class Disk {
 		await this.vault.delete(toDelete, true);
 	}
 
+	async listFiles(markdownOnly = false): Promise<TFile[]> {
+		if (markdownOnly) {
+			return this.vault.getMarkdownFiles();
+		}
+		return this.vault.getFiles();
+	}
+
 	async readObject(vaultPath: string): Promise<string> {
 		const file = this.vault.getFileByPath(vaultPath);
+
 		if (file == null) {
 			throw new Error("File doesn't exists");
 		}
+
 		const v = await this.vault.cachedRead(file);
 		return v;
 	}

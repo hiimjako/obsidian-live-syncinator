@@ -9,6 +9,8 @@ import { Auth } from "src/auth";
 import { WsClient } from "src/ws";
 import { HttpClient } from "src/http";
 import { ApiClient } from "src/api";
+import { Disk } from "src/storage/storage";
+import { computeDiff } from "src/diff";
 
 export default class RealTimeSync extends Plugin {
 	settings: PluginSettings = DEFAULT_SETTINGS;
@@ -18,6 +20,7 @@ export default class RealTimeSync extends Plugin {
 	private httpClient: HttpClient;
 	private wsClient: WsClient;
 	private filePathToId: Map<string, number> = new Map();
+	private storage: Disk;
 
 	constructor(app: App, manifest: PluginManifest) {
 		super(app, manifest);
@@ -36,6 +39,8 @@ export default class RealTimeSync extends Plugin {
 				console.log(data);
 			},
 		});
+
+		this.storage = new Disk(this.app.vault);
 	}
 
 	private async refreshToken() {
@@ -57,31 +62,48 @@ export default class RealTimeSync extends Plugin {
 
 		for (const file of files) {
 			this.filePathToId.set(file.workspace_path, file.id);
+
+			const exists = await this.storage.exists(file.workspace_path);
+			const fileWithContent = await apiClient.fetchFile(file.id);
+
+			if (!exists) {
+				await this.storage.createObject(
+					file.workspace_path,
+					fileWithContent.content,
+				);
+			} else {
+				const currentContent = await this.storage.readObject(
+					file.workspace_path,
+				);
+				const diffs = computeDiff(currentContent, fileWithContent.content);
+				await this.storage.persistChunks(file.workspace_path, diffs);
+			}
 		}
 		console.log(`fetched ${this.filePathToId.size} files from remote`);
 	}
 
-	async onload() {
-		await this.loadSettings();
+	async deferredLoad() {
+		await this.fetchFiles();
+		this.updateStatusBar();
+		new Notice("Real time sync inizialized");
+	}
 
+	async onload() {
+		// Settings
+		await this.loadSettings();
+		this.addSettingTab(new SettingTab(this.app, this));
+
+		// Init
 		await this.refreshToken();
 		this.registerInterval(
 			window.setInterval(async () => await this.refreshToken(), 5 * 60 * 1000),
 		);
 
-		await this.fetchFiles();
+		setTimeout(async () => {
+			await this.deferredLoad();
+		}, 2000);
 
-		this.app.vault;
-		// await this.app.vault.createFolder("weilla/", "");
-		// await this.app.vault.create("weilla/pippo2.md", "pluto");
-		// await writeFile("foo", "bar", { encoding: "utf8" });
-
-		this.addSettingTab(new SettingTab(this.app, this));
-
-		this.updateStatusBar();
-
-		new Notice("Real time sync inizialized");
-
+		// Events
 		this.registerEvent(
 			this.app.vault.on("create", async (file: TAbstractFile) => {
 				if (this.filePathToId.has(file.path)) {

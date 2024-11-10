@@ -37,18 +37,17 @@ export class ApiClient {
 		return res.data ?? [];
 	}
 
-	// async fetchFile(name: string, password: string): Promise<FileWithContent> {
-	// 	const wc: WorkspaceCredentials = { name, password };
-	//
-	// 	const res = await this.client.post<AuthToken>("/v1/auth/login", wc);
-	//
-	// 	console.log(res);
-	// 	if (res.status !== StatusCodes.OK) {
-	// 		throw new Error(`invalid credentials for workspace ${wc.name}`);
-	// 	}
-	//
-	// 	return res.data;
-	// }
+	async fetchFile(fileId: number): Promise<FileWithContent> {
+		const res = await this.client.get<FileWithContent>(
+			`/v1/api/file/${fileId}`,
+		);
+
+		if (res.status !== StatusCodes.OK) {
+			throw new Error(`error while fetching file content ${res.data}`);
+		}
+
+		return res.data;
+	}
 
 	async createFile(path: string, content: string): Promise<File> {
 		const body: CreateFile = { path, content };
