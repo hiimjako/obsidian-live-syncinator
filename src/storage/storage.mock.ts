@@ -45,6 +45,13 @@ export function CreateVaultMock(basepath: string): Vault {
 				path: normalizedPath,
 			};
 		},
+		async process(file, fn, _options) {
+			const vaultPath = fullPath(file.path);
+			const data = await fs.readFile(vaultPath, "utf8");
+			const newData = fn(data);
+			await fs.writeFile(vaultPath, newData, { encoding: "utf8" });
+			return newData;
+		},
 		getFileByPath(normalizedPath) {
 			return {
 				vault: v,
@@ -72,8 +79,8 @@ export function CreateVaultMock(basepath: string): Vault {
 			};
 		},
 		async cachedRead(file) {
-			const path = fullPath(file.path);
-			const data = await fs.readFile(path, "utf8");
+			const vaultPath = fullPath(file.path);
+			const data = await fs.readFile(vaultPath, "utf8");
 			return data;
 		},
 		async delete(file, force) {

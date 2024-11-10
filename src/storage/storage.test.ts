@@ -5,6 +5,7 @@ import { computeDiff } from "../diff";
 import { Disk } from "../storage/storage";
 import { CreateVaultMock } from "../storage/storage.mock";
 import type { Vault } from "obsidian";
+import { randomUUID } from "node:crypto";
 
 describe("Disk storage integration tests", () => {
 	let v: Vault;
@@ -20,60 +21,56 @@ describe("Disk storage integration tests", () => {
 		mock.restoreAll();
 	});
 
-	// test("should persist changes correctly for various chunks", async (t) => {
-	// 	const v = new Vault();
-	// 	t.mock.method(v, "createFolder");
-	// 	// t.mock.method(v.adapter, "");
-	// 	const d = new Disk(v);
-	//
-	// 	const tests = [
-	// 		// {
-	// 		// 	name: "compute remove chunk in present file",
-	// 		// 	expected: "hello",
-	// 		// 	diffs: [
-	// 		// 		computeDiff("hello", ""),
-	// 		// 		computeDiff("", "he__llo"),
-	// 		// 		computeDiff("he__llo", "hello"),
-	// 		// 	],
-	// 		// },
-	// 		{
-	// 			name: "compute add chunk in present file",
-	// 			expected: "hello world!",
-	// 			diffs: [
-	// 				computeDiff("", "hello"),
-	// 				computeDiff("hello", "hello!"),
-	// 				computeDiff("hello!", "hello world!"),
-	// 			],
-	// 		},
-	// 	];
-	//
-	// 	for (const tt of tests) {
-	// 		await test(tt.name, async () => {
-	// 			const fileName = randomUUID();
-	// 			await assert.doesNotReject(async () => {
-	// 				await d.createObject(fileName, Buffer.from(""));
-	// 			});
-	//
-	// 			assert.ok(await d.fileExists(fileName));
-	//
-	// 			for (const di of tt.diffs) {
-	// 				for (const d2 of di) {
-	// 					await assert.doesNotReject(
-	// 						async () => await d.persistChunk(fileName, d2),
-	// 					);
-	// 				}
-	// 			}
-	// 			const fileContent = await d.readObject(fileName);
-	// 			assert.strictEqual(fileContent.toString(), tt.expected);
-	// 		});
-	// 	}
-	// });
+	test("should persist changes correctly for various chunks", async () => {
+		const d = new Disk(v);
 
-	// test("should return error on non-existing file", async () => {
-	// 	await assert.rejects(async () => {
-	// 		await d.persistChunk("not-existing-file", computeDiff("", "foo")[0]);
-	// 	});
-	// });
+		const tests = [
+			{
+				name: "compute remove chunk in present file",
+				initialContent: "",
+				expected: "hello",
+				diffs: [
+					computeDiff("hello", ""),
+					computeDiff("", "he__llo"),
+					computeDiff("he__llo", "hello"),
+				],
+			},
+			{
+				name: "compute add chunk in present file",
+				initialContent: "",
+				expected: "hello world!",
+				diffs: [
+					computeDiff("", "hello"),
+					computeDiff("hello", "hello!"),
+					computeDiff("hello!", "hello world!"),
+				],
+			},
+		];
+
+		for (const tt of tests) {
+			await test(tt.name, async () => {
+				const fileName = randomUUID();
+				await d.createObject(fileName, tt.initialContent);
+
+				assert.strictEqual(await d.exists(fileName), true);
+
+				for (const di of tt.diffs) {
+					await d.persistChunks(fileName, di);
+				}
+
+				const fileContent = await d.readObject(fileName);
+				assert.strictEqual(fileContent.toString(), tt.expected);
+			});
+		}
+	});
+
+	test("should return error on non-existing file", async () => {
+		const d = new Disk(v);
+
+		await assert.rejects(async () => {
+			await d.persistChunk("not-existing-file", computeDiff("", "foo")[0]);
+		});
+	});
 
 	test("should create, read, and delete objects correctly", async (t) => {
 		const createFolderMock = t.mock.method(v, "createFolder");
