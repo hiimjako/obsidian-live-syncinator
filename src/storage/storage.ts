@@ -1,4 +1,4 @@
-import * as path from "node:path";
+import path from "path-browserify";
 import { Operation, type DiffChunk } from "../diff";
 
 import type { TAbstractFile, Vault } from "obsidian";
