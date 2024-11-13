@@ -54,12 +54,14 @@ describe("Disk storage integration tests", () => {
 
 				assert.strictEqual(await d.exists(fileName), true);
 
+				let content = "";
 				for (const di of tt.diffs) {
-					await d.persistChunks(fileName, di);
+					content = await d.persistChunks(fileName, di);
 				}
 
 				const fileContent = await d.readObject(fileName);
 				assert.strictEqual(fileContent.toString(), tt.expected);
+				assert.strictEqual(content, tt.expected);
 			});
 		}
 	});

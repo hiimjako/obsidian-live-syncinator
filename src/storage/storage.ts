@@ -62,20 +62,26 @@ export class Disk {
 		return v;
 	}
 
-	async persistChunks(vaultPath: string, chunks: DiffChunk[]): Promise<void> {
+	async persistChunks(vaultPath: string, chunks: DiffChunk[]): Promise<string> {
+		let content = "";
+
 		for (const chunk of chunks) {
-			await this.persistChunk(vaultPath, chunk);
+			content = await this.persistChunk(vaultPath, chunk);
 		}
+
+		return content;
 	}
 
-	async persistChunk(vaultPath: string, chunk: DiffChunk): Promise<void> {
+	async persistChunk(vaultPath: string, chunk: DiffChunk): Promise<string> {
 		switch (chunk.type) {
 			case Operation.DiffAdd:
-				await this.addBytesToFile(vaultPath, chunk.position, chunk.text);
-				break;
+				return await this.addBytesToFile(vaultPath, chunk.position, chunk.text);
 			case Operation.DiffRemove:
-				await this.removeBytesFromFile(vaultPath, chunk.position, chunk.len);
-				break;
+				return await this.removeBytesFromFile(
+					vaultPath,
+					chunk.position,
+					chunk.len,
+				);
 			default:
 				throw new Error(`Diff type ${chunk.type} not supported`);
 		}
@@ -85,13 +91,13 @@ export class Disk {
 		vaultPath: string,
 		start: number,
 		str: string,
-	): Promise<void> {
+	): Promise<string> {
 		const file = this.vault.getFileByPath(vaultPath);
 		if (file == null) {
 			throw new Error("File doesn't exists");
 		}
 
-		await this.vault.process(file, (data) => {
+		return await this.vault.process(file, (data) => {
 			return data.slice(0, start) + str + data.slice(start);
 		});
 	}
@@ -100,13 +106,13 @@ export class Disk {
 		vaultPath: string,
 		start: number,
 		length: number,
-	): Promise<void> {
+	): Promise<string> {
 		const file = this.vault.getFileByPath(vaultPath);
 		if (file == null) {
 			throw new Error("File doesn't exists");
 		}
 
-		await this.vault.process(file, (data) => {
+		return await this.vault.process(file, (data) => {
 			return data.slice(0, start) + data.slice(length + start);
 		});
 	}
