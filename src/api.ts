@@ -1,7 +1,7 @@
 import { StatusCodes } from "http-status-codes";
 import type { HttpClient } from "./http";
 
-declare interface File {
+export declare interface File {
 	id: number;
 	disk_path: string;
 	workspace_path: string;
@@ -12,7 +12,7 @@ declare interface File {
 	workspace_id: number;
 }
 
-declare interface FileWithContent extends File {
+export declare interface FileWithContent extends File {
 	content: string;
 }
 

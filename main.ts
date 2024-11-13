@@ -8,7 +8,7 @@ import {
 import { Auth } from "src/auth";
 import { WsClient } from "src/ws";
 import { HttpClient } from "src/http";
-import { ApiClient } from "src/api";
+import { ApiClient, type FileWithContent } from "src/api";
 import { Disk } from "src/storage/storage";
 import { computeDiff } from "src/diff";
 
@@ -20,7 +20,7 @@ export default class RealTimeSync extends Plugin {
 	private httpClient: HttpClient;
 	private wsClient: WsClient;
 	private filePathToId: Map<string, number> = new Map();
-	private fileIdToContent: Map<number, string> = new Map();
+	private fileIdToFile: Map<number, FileWithContent> = new Map();
 	private storage: Disk;
 
 	constructor(app: App, manifest: PluginManifest) {
@@ -33,11 +33,31 @@ export default class RealTimeSync extends Plugin {
 			{},
 		);
 		this.wsClient = new WsClient(this.settings.domain, {
-			onError(err) {
+			async onError(err) {
 				console.error(err);
 			},
-			onMessage(data) {
-				console.log(data);
+			onMessage: async (data) => {
+				console.log("chunk from ws", data);
+
+				const { fileId, chunks } = data;
+
+				const file = this.fileIdToFile.get(fileId);
+				if (file == null) {
+					console.error(`file '${fileId}' not found`);
+					return;
+				}
+
+				const content = await this.storage.persistChunks(
+					file.workspace_path,
+					chunks,
+				);
+
+				file.content = content;
+
+				this.fileIdToFile.set(file.id, file);
+
+				// TODO: it should send the diff between the previous content
+				// and the updated one? to advice the other clients?
 			},
 		});
 
@@ -67,6 +87,7 @@ export default class RealTimeSync extends Plugin {
 			const exists = await this.storage.exists(file.workspace_path);
 			const fileWithContent = await apiClient.fetchFile(file.id);
 
+			console.log(fileWithContent);
 			if (!exists) {
 				await this.storage.createObject(
 					file.workspace_path,
@@ -77,13 +98,14 @@ export default class RealTimeSync extends Plugin {
 					file.workspace_path,
 				);
 				const diffs = computeDiff(currentContent, fileWithContent.content);
-				await this.storage.persistChunks(file.workspace_path, diffs);
+				const content = await this.storage.persistChunks(
+					file.workspace_path,
+					diffs,
+				);
+				fileWithContent.content = content;
 			}
 
-			this.fileIdToContent.set(
-				file.id,
-				await this.storage.readObject(file.workspace_path),
-			);
+			this.fileIdToFile.set(file.id, fileWithContent);
 		}
 		console.log(`fetched ${this.filePathToId.size} files from remote`);
 	}
@@ -113,14 +135,14 @@ export default class RealTimeSync extends Plugin {
 					return;
 				}
 
-				const currentContent = this.fileIdToContent.get(fileId);
-				if (currentContent == null) {
+				const currentFile = this.fileIdToFile.get(fileId);
+				if (currentFile == null) {
 					console.error(`file '${file.path}' not found`);
 					return;
 				}
 
 				const newContent = await this.storage.readObject(file.path);
-				const chunks = computeDiff(currentContent, newContent);
+				const chunks = computeDiff(currentFile.content, newContent);
 
 				this.wsClient.sendMessage({ fileId, chunks });
 				console.log("modify", file);

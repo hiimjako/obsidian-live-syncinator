@@ -1,13 +1,13 @@
 import type { DiffChunk } from "./diff";
 
 export type DiffChunkMessage = {
-	fileId: string;
+	fileId: number;
 	chunks: DiffChunk[];
 };
 
 interface WsEvents {
-	onMessage: (_: DiffChunkMessage) => void;
-	onError: (_: Event) => void;
+	onMessage: (_: DiffChunkMessage) => Promise<void>;
+	onError: (_: Event) => Promise<void>;
 }
 
 export class WsClient {
@@ -26,10 +26,10 @@ export class WsClient {
 
 		this.ws.addEventListener(
 			"message",
-			function message(event: MessageEvent<DiffChunkMessage>) {
+			async function message(event: MessageEvent<DiffChunkMessage>) {
 				try {
 					const msg = JSON.parse(event.data.toString());
-					events.onMessage(msg);
+					await events.onMessage(msg);
 				} catch (err) {
 					console.error(err);
 				}
