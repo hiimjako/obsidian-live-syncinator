@@ -45,6 +45,29 @@ describe("Disk storage integration tests", () => {
 					computeDiff("hello!", "hello world!"),
 				],
 			},
+			{
+				name: "handles new lines",
+				initialContent: "",
+				expected: `hello!
+                         newline`,
+				diffs: [
+					computeDiff(
+						"",
+						`hello 
+                         world`,
+					),
+					computeDiff(
+						`hello 
+                         world`,
+						"hello!",
+					),
+					computeDiff(
+						"hello!",
+						`hello!
+                         newline`,
+					),
+				],
+			},
 		];
 
 		for (const tt of tests) {

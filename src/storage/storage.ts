@@ -2,6 +2,7 @@ import path from "path-browserify";
 import { Operation, type DiffChunk } from "../diff";
 
 import type { TAbstractFile, TFile, Vault } from "obsidian";
+import { assert } from "node:console";
 
 export class Disk {
 	private vault: Vault;
@@ -63,6 +64,8 @@ export class Disk {
 	}
 
 	async persistChunks(vaultPath: string, chunks: DiffChunk[]): Promise<string> {
+		assert(chunks !== null, `chunks for ${vaultPath} are null`);
+
 		let content = "";
 
 		for (const chunk of chunks) {
