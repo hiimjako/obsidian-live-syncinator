@@ -37,6 +37,17 @@ describe("compute diff should be compliant with server implemenation", () => {
 				{ position: 1, type: Operation.DiffAdd, text: "e", len: 1 },
 			] as DiffChunk[],
 		},
+		{
+			name: "handles newlines",
+			text: `hello
+
+			world`,
+			update: "hello world",
+			expected: [
+				{ len: 5, position: 5, text: "\n\n\t\t\t", type: -1 },
+				{ len: 1, position: 5, text: " ", type: 1 },
+			] as DiffChunk[],
+		},
 	];
 
 	for (const { name, text, update, expected } of testCases) {
