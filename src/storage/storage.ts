@@ -2,7 +2,7 @@ import path from "path-browserify";
 import { Operation, type DiffChunk } from "../diff";
 
 import type { TAbstractFile, TFile, Vault } from "obsidian";
-import { assert } from "node:console";
+import { assert } from "src/utils/assert";
 
 export class Disk {
 	private vault: Vault;
