@@ -20,6 +20,7 @@ export default class RealTimeSync extends Plugin {
 	private httpClient: HttpClient;
 	private wsClient: WsClient;
 	private filePathToId: Map<string, number> = new Map();
+	private fileIdToContent: Map<number, string> = new Map();
 	private storage: Disk;
 
 	constructor(app: App, manifest: PluginManifest) {
@@ -78,32 +79,16 @@ export default class RealTimeSync extends Plugin {
 				const diffs = computeDiff(currentContent, fileWithContent.content);
 				await this.storage.persistChunks(file.workspace_path, diffs);
 			}
+
+			this.fileIdToContent.set(
+				file.id,
+				await this.storage.readObject(file.workspace_path),
+			);
 		}
 		console.log(`fetched ${this.filePathToId.size} files from remote`);
 	}
 
-	async deferredLoad() {
-		await this.fetchFiles();
-		this.updateStatusBar();
-		new Notice("Real time sync inizialized");
-	}
-
-	async onload() {
-		// Settings
-		await this.loadSettings();
-		this.addSettingTab(new SettingTab(this.app, this));
-
-		// Init
-		await this.refreshToken();
-		this.registerInterval(
-			window.setInterval(async () => await this.refreshToken(), 5 * 60 * 1000),
-		);
-
-		setTimeout(async () => {
-			await this.deferredLoad();
-		}, 2000);
-
-		// Events
+	registerEvents() {
 		this.registerEvent(
 			this.app.vault.on("create", async (file: TAbstractFile) => {
 				if (this.filePathToId.has(file.path)) {
@@ -121,7 +106,23 @@ export default class RealTimeSync extends Plugin {
 		);
 
 		this.registerEvent(
-			this.app.vault.on("modify", (file: TAbstractFile) => {
+			this.app.vault.on("modify", async (file: TAbstractFile) => {
+				const fileId = this.filePathToId.get(file.path);
+				if (fileId == null) {
+					console.error(`file '${file.path}' not found`);
+					return;
+				}
+
+				const currentContent = this.fileIdToContent.get(fileId);
+				if (currentContent == null) {
+					console.error(`file '${file.path}' not found`);
+					return;
+				}
+
+				const newContent = await this.storage.readObject(file.path);
+				const chunks = computeDiff(currentContent, newContent);
+
+				this.wsClient.sendMessage({ fileId, chunks });
 				console.log("modify", file);
 			}),
 		);
@@ -176,6 +177,26 @@ export default class RealTimeSync extends Plugin {
 				},
 			),
 		);
+	}
+
+	async onload() {
+		// Settings
+		await this.loadSettings();
+		this.addSettingTab(new SettingTab(this.app, this));
+
+		// Init
+		await this.refreshToken();
+		this.registerInterval(
+			window.setInterval(async () => await this.refreshToken(), 5 * 60 * 1000),
+		);
+
+		// Deferred startup
+		setTimeout(async () => {
+			await this.fetchFiles();
+			this.updateStatusBar();
+			new Notice("Real time sync inizialized");
+			this.registerEvents();
+		}, 2000);
 	}
 
 	onunload() {
