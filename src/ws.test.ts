@@ -12,21 +12,18 @@ describe("WsClient with real WebSocket server", () => {
 	let lastMessage: DiffChunkMessage | null;
 	let lastError: Event | null;
 
-	const events = {
-		onMessage: (msg: DiffChunkMessage) => {
-			lastMessage = msg;
-		},
-		onError: (err: Event) => {
-			lastError = err;
-		},
-	};
-
 	beforeEach(async () => {
 		const port = await getPort();
 		server = new WebSocket.Server({ port });
 		lastMessage = null;
 		lastError = null;
-		wsClient = new WsClient(`127.0.0.1:${port}`, events);
+		wsClient = new WsClient(`127.0.0.1:${port}`);
+		wsClient.registerOnMessage(async (msg: DiffChunkMessage) => {
+			lastMessage = msg;
+		});
+		wsClient.registerOnError(async (err: Event) => {
+			lastError = err;
+		});
 	});
 
 	afterEach(() => {
@@ -43,7 +40,7 @@ describe("WsClient with real WebSocket server", () => {
 
 	test("should send a message to the WebSocket server", (_, done) => {
 		const message: DiffChunkMessage = {
-			fileId: "123",
+			fileId: 123,
 			chunks: [{ type: Operation.DiffAdd, position: 0, len: 0, text: "" }],
 		};
 
@@ -62,7 +59,7 @@ describe("WsClient with real WebSocket server", () => {
 
 	test("should receive a message from the WebSocket server", (_, done) => {
 		const message: DiffChunkMessage = {
-			fileId: "123",
+			fileId: 123,
 			chunks: [],
 		};
 

@@ -1,204 +1,63 @@
 import { Notice, Plugin } from "obsidian";
-import type { App, PluginManifest, TAbstractFile } from "obsidian";
+import type { App, PluginManifest } from "obsidian";
 import {
 	DEFAULT_SETTINGS,
 	SettingTab,
 	type PluginSettings,
 } from "./src/settings";
-import { Auth } from "src/auth";
 import { WsClient } from "src/ws";
 import { HttpClient } from "src/http";
-import { ApiClient, type FileWithContent } from "src/api";
+import { ApiClient } from "src/api";
 import { Disk } from "src/storage/storage";
-import { computeDiff } from "src/diff";
+import { RealTimePlugin } from "src/plugin";
 
 export default class RealTimeSync extends Plugin {
 	settings: PluginSettings = DEFAULT_SETTINGS;
 	private statusBar: HTMLElement;
 	private uploadingFiles = 0;
 	private downloadingFiles = 0;
-	private httpClient: HttpClient;
 	private wsClient: WsClient;
-	private filePathToId: Map<string, number> = new Map();
-	private fileIdToFile: Map<number, FileWithContent> = new Map();
 	private storage: Disk;
+	private apiClient: ApiClient;
 
 	constructor(app: App, manifest: PluginManifest) {
 		super(app, manifest);
 		this.statusBar = this.addStatusBarItem();
 
-		this.httpClient = new HttpClient(
+		const httpClient = new HttpClient(
 			this.settings.https ? "https" : "http",
 			this.settings.domain,
 			{},
 		);
-		this.wsClient = new WsClient(this.settings.domain, {
-			async onError(err) {
-				console.error(err);
-			},
-			onMessage: async (data) => {
-				console.log("chunk from ws", data);
-
-				const { fileId, chunks } = data;
-
-				const file = this.fileIdToFile.get(fileId);
-				if (file == null) {
-					console.error(`file '${fileId}' not found`);
-					return;
-				}
-
-				const content = await this.storage.persistChunks(
-					file.workspace_path,
-					chunks,
-				);
-
-				file.content = content;
-
-				this.fileIdToFile.set(file.id, file);
-
-				// TODO: it should send the diff between the previous content
-				// and the updated one? to advice the other clients?
-			},
-		});
-
+		this.apiClient = new ApiClient(httpClient);
+		this.wsClient = new WsClient(this.settings.domain);
 		this.storage = new Disk(this.app.vault);
 	}
 
+	async registerEvents() {
+		const plugin = new RealTimePlugin(
+			this.storage,
+			this.apiClient,
+			this.wsClient,
+		);
+
+		await plugin.init();
+
+		this.registerEvent(this.app.vault.on("create", plugin.events.create));
+		this.registerEvent(this.app.vault.on("modify", plugin.events.modify));
+		this.registerEvent(this.app.vault.on("delete", plugin.events.delete));
+		this.registerEvent(this.app.vault.on("rename", plugin.events.rename));
+	}
+
 	private async refreshToken() {
-		const auth = new Auth(this.httpClient);
 		try {
-			const res = await auth.login(
+			await this.apiClient.refreshToken(
 				this.settings.workspaceName,
 				this.settings.workspacePass,
 			);
-			this.httpClient.setAuthorizationHeader(res.token);
 		} catch (error) {
 			console.error(error);
 		}
-	}
-
-	private async fetchFiles() {
-		const apiClient = new ApiClient(this.httpClient);
-		const files = await apiClient.fetchFiles();
-
-		for (const file of files) {
-			this.filePathToId.set(file.workspace_path, file.id);
-
-			const exists = await this.storage.exists(file.workspace_path);
-			const fileWithContent = await apiClient.fetchFile(file.id);
-
-			console.log(fileWithContent);
-			if (!exists) {
-				await this.storage.createObject(
-					file.workspace_path,
-					fileWithContent.content,
-				);
-			} else {
-				const currentContent = await this.storage.readObject(
-					file.workspace_path,
-				);
-				const diffs = computeDiff(currentContent, fileWithContent.content);
-				const content = await this.storage.persistChunks(
-					file.workspace_path,
-					diffs,
-				);
-				fileWithContent.content = content;
-			}
-
-			this.fileIdToFile.set(file.id, fileWithContent);
-		}
-		console.log(`fetched ${this.filePathToId.size} files from remote`);
-	}
-
-	registerEvents() {
-		this.registerEvent(
-			this.app.vault.on("create", async (file: TAbstractFile) => {
-				if (this.filePathToId.has(file.path)) {
-					return;
-				}
-
-				try {
-					const apiClient = new ApiClient(this.httpClient);
-					const fileApi = await apiClient.createFile(file.path, "");
-					this.filePathToId.set(fileApi.workspace_path, fileApi.id);
-				} catch (error) {
-					console.error(error);
-				}
-			}),
-		);
-
-		this.registerEvent(
-			this.app.vault.on("modify", async (file: TAbstractFile) => {
-				const fileId = this.filePathToId.get(file.path);
-				if (fileId == null) {
-					console.error(`file '${file.path}' not found`);
-					return;
-				}
-
-				const currentFile = this.fileIdToFile.get(fileId);
-				if (currentFile == null) {
-					console.error(`file '${file.path}' not found`);
-					return;
-				}
-
-				const newContent = await this.storage.readObject(file.path);
-				const chunks = computeDiff(currentFile.content, newContent);
-
-				this.wsClient.sendMessage({ fileId, chunks });
-				console.log("modify", file);
-			}),
-		);
-
-		this.registerEvent(
-			this.app.vault.on("delete", async (file: TAbstractFile) => {
-				const fileId = this.filePathToId.get(file.path);
-				if (!fileId) {
-					console.error(`missing file for deletion: ${file.path}`);
-					return;
-				}
-
-				try {
-					const apiClient = new ApiClient(this.httpClient);
-					await apiClient.deleteFile(fileId);
-					this.filePathToId.delete(file.path);
-				} catch (error) {
-					console.error(error);
-				}
-			}),
-		);
-
-		this.registerEvent(
-			this.app.vault.on(
-				"rename",
-				async (file: TAbstractFile, oldPath: string) => {
-					const oldFileId = this.filePathToId.get(oldPath);
-					if (!oldFileId) {
-						console.error(`missing file for rename: ${oldPath}`);
-						return;
-					}
-
-					const apiClient = new ApiClient(this.httpClient);
-
-					try {
-						await apiClient.deleteFile(oldFileId);
-						this.filePathToId.delete(file.path);
-					} catch (error) {
-						console.error(error);
-					}
-
-					if (this.filePathToId.has(file.path)) {
-						return;
-					}
-
-					try {
-						const fileApi = await apiClient.createFile(file.path, "");
-						this.filePathToId.set(fileApi.workspace_path, fileApi.id);
-					} catch (error) {
-						console.error(error);
-					}
-				},
-			),
-		);
 	}
 
 	async onload() {
@@ -207,17 +66,16 @@ export default class RealTimeSync extends Plugin {
 		this.addSettingTab(new SettingTab(this.app, this));
 
 		// Init
-		await this.refreshToken();
+		this.refreshToken();
 		this.registerInterval(
 			window.setInterval(async () => await this.refreshToken(), 5 * 60 * 1000),
 		);
 
 		// Deferred startup
 		setTimeout(async () => {
-			await this.fetchFiles();
+			await this.registerEvents();
 			this.updateStatusBar();
 			new Notice("Real time sync inizialized");
-			this.registerEvents();
 		}, 2000);
 	}
 

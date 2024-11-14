@@ -5,31 +5,28 @@ export type DiffChunkMessage = {
 	chunks: DiffChunk[];
 };
 
-interface WsEvents {
-	onMessage: (_: DiffChunkMessage) => Promise<void>;
-	onError: (_: Event) => Promise<void>;
-}
-
 export class WsClient {
 	private ws: WebSocket;
 
-	constructor(domain: string, events: WsEvents) {
+	constructor(domain: string) {
 		this.ws = new WebSocket(`ws://${domain}/v1/sync`);
+	}
 
-		this.ws.addEventListener("error", events.onError);
+	registerOnClose(fn: (_: CloseEvent) => Promise<void>) {
+		this.ws.addEventListener("close", fn);
+	}
 
-		this.ws.addEventListener("close", (event) => {
-			if (!event.wasClean) {
-				events.onError(new Event("WebSocket closed unexpectedly"));
-			}
-		});
+	registerOnError(fn: (_: Event) => Promise<void>) {
+		this.ws.addEventListener("error", fn);
+	}
 
+	registerOnMessage(fn: (_: DiffChunkMessage) => Promise<void>) {
 		this.ws.addEventListener(
 			"message",
 			async function message(event: MessageEvent<DiffChunkMessage>) {
 				try {
 					const msg = JSON.parse(event.data.toString());
-					await events.onMessage(msg);
+					await fn(msg);
 				} catch (err) {
 					console.error(err);
 				}

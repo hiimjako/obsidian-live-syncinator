@@ -21,6 +21,15 @@ declare interface CreateFile {
 	content: string;
 }
 
+interface WorkspaceCredentials {
+	name: string;
+	password: string;
+}
+
+interface AuthToken {
+	token: string;
+}
+
 export class ApiClient {
 	private client: HttpClient;
 	constructor(client: HttpClient) {
@@ -67,5 +76,24 @@ export class ApiClient {
 		if (res.status !== StatusCodes.NO_CONTENT) {
 			throw new Error(`error while deleting file: ${res.data}`);
 		}
+	}
+
+	async login(name: string, password: string): Promise<AuthToken> {
+		const wc: WorkspaceCredentials = { name, password };
+
+		const res = await this.client.post<AuthToken>("/v1/auth/login", wc);
+
+		if (res.status !== StatusCodes.OK) {
+			throw new Error(
+				`invalid credentials for workspace ${wc.name}: ${res.data}`,
+			);
+		}
+
+		return res.data;
+	}
+
+	async refreshToken(name: string, password: string) {
+		const res = await this.login(name, password);
+		this.client.setAuthorizationHeader(res.token);
 	}
 }
