@@ -25,7 +25,7 @@ export class RealTimePlugin {
 		this.wsClient = wsClient;
 
 		this.wsClient.registerOnMessage(this.onWsMessage);
-		this.wsClient.registerOnError(async (event) => console.error(event));
+		this.wsClient.registerOnError(this.onWsError);
 		this.wsClient.registerOnClose(async (event) => {
 			if (!event.wasClean) {
 				console.error("WebSocket closed unexpectedly");
@@ -33,10 +33,10 @@ export class RealTimePlugin {
 		});
 
 		this.events = {
-			create: this.create,
-			delete: this.delete,
-			modify: this.modify,
-			rename: this.rename,
+			create: this.create.bind(this),
+			delete: this.delete.bind(this),
+			modify: this.modify.bind(this),
+			rename: this.rename.bind(this),
 		};
 	}
 
@@ -49,7 +49,6 @@ export class RealTimePlugin {
 			const exists = await this.storage.exists(file.workspace_path);
 			const fileWithContent = await this.apiClient.fetchFile(file.id);
 
-			console.log(fileWithContent);
 			if (!exists) {
 				await this.storage.createObject(
 					file.workspace_path,
@@ -96,6 +95,10 @@ export class RealTimePlugin {
 		// and the updated one? to advice the other clients?
 	}
 
+	private async onWsError(event: Event) {
+		console.error(event);
+	}
+
 	private async create(file: TAbstractFile) {
 		if (this.filePathToId.has(file.path)) {
 			return;
@@ -104,6 +107,10 @@ export class RealTimePlugin {
 		try {
 			const fileApi = await this.apiClient.createFile(file.path, "");
 			this.filePathToId.set(fileApi.workspace_path, fileApi.id);
+			this.fileIdToFile.set(fileApi.id, {
+				...fileApi,
+				content: "",
+			});
 		} catch (error) {
 			console.error(error);
 		}
@@ -157,21 +164,21 @@ export class RealTimePlugin {
 		}
 
 		try {
+			this.filePathToId.delete(oldPath);
+			this.fileIdToFile.delete(oldFileId);
 			await this.apiClient.deleteFile(oldFileId);
-			this.filePathToId.delete(file.path);
 		} catch (error) {
 			console.error(error);
 		}
 
-		if (this.filePathToId.has(file.path)) {
-			return;
-		}
+		await this.create(file);
+	}
 
-		try {
-			const fileApi = await this.apiClient.createFile(file.path, "");
-			this.filePathToId.set(fileApi.workspace_path, fileApi.id);
-		} catch (error) {
-			console.error(error);
-		}
+	getFilePathToId(): Map<string, number> {
+		return new Map(this.filePathToId);
+	}
+
+	getFileIdToFile(): Map<number, FileWithContent> {
+		return new Map(this.fileIdToFile);
 	}
 }
