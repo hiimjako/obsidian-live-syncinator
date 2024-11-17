@@ -3,13 +3,13 @@ import type { HttpClient } from "./http";
 
 export declare interface File {
 	id: number;
-	disk_path: string;
-	workspace_path: string;
-	mime_type: string;
+	diskPath: string;
+	workspacePath: string;
+	mimeType: string;
 	hash: string;
-	created_at: string;
-	updated_at: string;
-	workspace_id: number;
+	createdAt: string;
+	updatedAt: string;
+	workspaceId: number;
 }
 
 export declare interface FileWithContent extends File {

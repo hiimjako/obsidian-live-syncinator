@@ -26,7 +26,7 @@ describe("Plugin integration tests", () => {
 		wsClient = new WsClient("localhost");
 
 		// to remove logs on tests
-		test.mock.method(wsClient, "registerOnError", () => {});
+		test.mock.method(wsClient, "registerOnError", () => { });
 
 		plugin = new RealTimePlugin(storage, apiClient, wsClient);
 	});
@@ -37,28 +37,31 @@ describe("Plugin integration tests", () => {
 	});
 
 	test("should load files on init", async (t) => {
-		const now = new Date().toString();
+		const oldTimeDate = new Date();
+		oldTimeDate.setDate(oldTimeDate.getDate() - 1);
+		const oldTime = oldTimeDate.toString();
+
 		const fetchFiles = t.mock.method(apiClient, "fetchFiles", (): File[] => {
 			return [
 				{
 					id: 1,
-					workspace_path: "files/newFile.md",
-					disk_path: "",
+					workspacePath: "files/newFile.md",
+					diskPath: "",
 					hash: "",
-					created_at: now,
-					updated_at: now,
-					mime_type: "",
-					workspace_id: 1,
+					createdAt: oldTime,
+					updatedAt: oldTime,
+					mimeType: "",
+					workspaceId: 1,
 				},
 				{
 					id: 2,
-					workspace_path: "files/alreadyInWorkspace.md",
-					disk_path: "",
+					workspacePath: "files/alreadyInWorkspace.md",
+					diskPath: "",
 					hash: "",
-					created_at: now,
-					updated_at: now,
-					mime_type: "",
-					workspace_id: 1,
+					createdAt: oldTime,
+					updatedAt: oldTime,
+					mimeType: "",
+					workspaceId: 1,
 				},
 			];
 		});
@@ -68,14 +71,14 @@ describe("Plugin integration tests", () => {
 			"fetchFile",
 			(): FileWithContent => ({
 				id: 2,
-				workspace_path: "files/alreadyInWorkspace.md",
+				workspacePath: "files/alreadyInWorkspace.md",
 				content: "lorem ipsum",
-				disk_path: "",
+				diskPath: "",
 				hash: "",
-				created_at: now,
-				updated_at: now,
-				mime_type: "",
-				workspace_id: 1,
+				createdAt: oldTime,
+				updatedAt: oldTime,
+				mimeType: "",
+				workspaceId: 1,
 			}),
 			{
 				times: 1,
@@ -87,14 +90,14 @@ describe("Plugin integration tests", () => {
 			"fetchFile",
 			(): FileWithContent => ({
 				id: 1,
-				workspace_path: "files/newFile.md",
+				workspacePath: "files/newFile.md",
 				content: "foo",
-				disk_path: "",
+				diskPath: "",
 				hash: "",
-				created_at: now,
-				updated_at: now,
-				mime_type: "",
-				workspace_id: 1,
+				createdAt: oldTime,
+				updatedAt: oldTime,
+				mimeType: "",
+				workspaceId: 1,
 			}),
 			{
 				times: 1,
@@ -121,28 +124,28 @@ describe("Plugin integration tests", () => {
 					1,
 					{
 						content: "foo",
-						created_at: now,
-						disk_path: "",
+						createdAt: oldTime,
+						diskPath: "",
 						hash: "",
 						id: 1,
-						mime_type: "",
-						updated_at: now,
-						workspace_id: 1,
-						workspace_path: "files/newFile.md",
+						mimeType: "",
+						updatedAt: oldTime,
+						workspaceId: 1,
+						workspacePath: "files/newFile.md",
 					},
 				],
 				[
 					2,
 					{
 						content: "lorem ipsum",
-						created_at: now,
-						disk_path: "",
+						createdAt: oldTime,
+						diskPath: "",
 						hash: "",
 						id: 2,
-						mime_type: "",
-						updated_at: now,
-						workspace_id: 1,
-						workspace_path: "files/alreadyInWorkspace.md",
+						mimeType: "",
+						updatedAt: oldTime,
+						workspaceId: 1,
+						workspacePath: "files/alreadyInWorkspace.md",
 					},
 				],
 			]),
@@ -157,13 +160,13 @@ describe("Plugin integration tests", () => {
 		const createFile = t.mock.method(apiClient, "createFile", (): File => {
 			return {
 				id: 1,
-				workspace_path: "files/newFile.md",
-				disk_path: "",
+				workspacePath: "files/newFile.md",
+				diskPath: "",
 				hash: "",
-				created_at: now,
-				updated_at: now,
-				mime_type: "",
-				workspace_id: 1,
+				createdAt: now,
+				updatedAt: now,
+				mimeType: "",
+				workspaceId: 1,
 			};
 		});
 
@@ -193,14 +196,14 @@ describe("Plugin integration tests", () => {
 					1,
 					{
 						content: "",
-						created_at: now,
-						disk_path: "",
+						createdAt: now,
+						diskPath: "",
 						hash: "",
 						id: 1,
-						mime_type: "",
-						updated_at: now,
-						workspace_id: 1,
-						workspace_path: "files/newFile.md",
+						mimeType: "",
+						updatedAt: now,
+						workspaceId: 1,
+						workspacePath: "files/newFile.md",
 					},
 				],
 			]),
@@ -209,17 +212,17 @@ describe("Plugin integration tests", () => {
 	});
 
 	test("should delete a file on 'delete'", async (t) => {
-		const deleteFile = t.mock.method(apiClient, "deleteFile", () => {});
+		const deleteFile = t.mock.method(apiClient, "deleteFile", () => { });
 		const createFile = t.mock.method(apiClient, "createFile", (): File => {
 			return {
 				id: 1,
-				workspace_path: "files/newFile.md",
-				disk_path: "",
+				workspacePath: "files/newFile.md",
+				diskPath: "",
 				hash: "",
-				created_at: new Date().toString(),
-				updated_at: new Date().toString(),
-				mime_type: "",
-				workspace_id: 1,
+				createdAt: new Date().toString(),
+				updatedAt: new Date().toString(),
+				mimeType: "",
+				workspaceId: 1,
 			};
 		});
 
@@ -248,20 +251,20 @@ describe("Plugin integration tests", () => {
 	});
 
 	test("should rename a file on 'rename'", async (t) => {
-		const deleteFile = t.mock.method(apiClient, "deleteFile", () => {});
+		const deleteFile = t.mock.method(apiClient, "deleteFile", () => { });
 		const createOldFile = t.mock.method(
 			apiClient,
 			"createFile",
 			(): File => {
 				return {
 					id: 1,
-					workspace_path: "files/oldName.md",
-					disk_path: "",
+					workspacePath: "files/oldName.md",
+					diskPath: "",
 					hash: "",
-					created_at: new Date().toString(),
-					updated_at: new Date().toString(),
-					mime_type: "",
-					workspace_id: 1,
+					createdAt: new Date().toString(),
+					updatedAt: new Date().toString(),
+					mimeType: "",
+					workspaceId: 1,
 				};
 			},
 			{ times: 1 },
@@ -286,13 +289,13 @@ describe("Plugin integration tests", () => {
 			(): File => {
 				return {
 					id: 1,
-					workspace_path: "files/newName.md",
-					disk_path: "",
+					workspacePath: "files/newName.md",
+					diskPath: "",
 					hash: "",
-					created_at: now,
-					updated_at: now,
-					mime_type: "",
-					workspace_id: 1,
+					createdAt: now,
+					updatedAt: now,
+					mimeType: "",
+					workspaceId: 1,
 				};
 			},
 			{ times: 1 },
@@ -319,14 +322,14 @@ describe("Plugin integration tests", () => {
 					1,
 					{
 						content: "",
-						created_at: now,
-						disk_path: "",
+						createdAt: now,
+						diskPath: "",
 						hash: "",
 						id: 1,
-						mime_type: "",
-						updated_at: now,
-						workspace_id: 1,
-						workspace_path: "files/newName.md",
+						mimeType: "",
+						updatedAt: now,
+						workspaceId: 1,
+						workspacePath: "files/newName.md",
 					},
 				],
 			]),

@@ -44,19 +44,19 @@ export class RealTimePlugin {
 		const files = await this.apiClient.fetchFiles();
 
 		for (const file of files) {
-			this.filePathToId.set(file.workspace_path, file.id);
+			this.filePathToId.set(file.workspacePath, file.id);
 
-			const exists = await this.storage.exists(file.workspace_path);
+			const exists = await this.storage.exists(file.workspacePath);
 			const fileWithContent = await this.apiClient.fetchFile(file.id);
 
 			if (!exists) {
 				await this.storage.createObject(
-					file.workspace_path,
+					file.workspacePath,
 					fileWithContent.content,
 				);
 			} else {
 				const currentContent = await this.storage.readObject(
-					file.workspace_path,
+					file.workspacePath,
 				);
 				const diffs = computeDiff(currentContent, fileWithContent.content);
 
@@ -64,13 +64,13 @@ export class RealTimePlugin {
 					// FIXME: in case we have deletion we should handle it, maybe asking to the
 					// user?
 					// For now we just let win the most recent version
-					const stat = await this.storage.stat(file.workspace_path);
-					const localFileMtime = stat?.mtime ?? 0;
+					const stat = await this.storage.stat(file.workspacePath);
+					const localFileMtime = new Date(stat?.mtime ?? 0);
+					const remoteFileMtime = new Date(fileWithContent.updatedAt);
 
-					// FIXME: types
-					if (fileWithContent.updated_at >= localFileMtime.toString()) {
+					if (remoteFileMtime >= localFileMtime) {
 						await this.storage.createObject(
-							file.workspace_path,
+							file.workspacePath,
 							fileWithContent.content,
 							{ force: true },
 						);
@@ -78,7 +78,7 @@ export class RealTimePlugin {
 				} else {
 					// in case of only add we can safely add the text to the local verison
 					const content = await this.storage.persistChunks(
-						file.workspace_path,
+						file.workspacePath,
 						diffs,
 					);
 					fileWithContent.content = content;
@@ -102,7 +102,7 @@ export class RealTimePlugin {
 		}
 
 		const content = await this.storage.persistChunks(
-			file.workspace_path,
+			file.workspacePath,
 			chunks,
 		);
 
@@ -125,7 +125,7 @@ export class RealTimePlugin {
 
 		try {
 			const fileApi = await this.apiClient.createFile(file.path, "");
-			this.filePathToId.set(fileApi.workspace_path, fileApi.id);
+			this.filePathToId.set(fileApi.workspacePath, fileApi.id);
 			this.fileIdToFile.set(fileApi.id, {
 				...fileApi,
 				content: "",
