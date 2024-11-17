@@ -8,6 +8,7 @@ import { HttpClient } from "./http";
 import { WsClient } from "./ws";
 import type { Vault } from "obsidian";
 import assert from "node:assert";
+import { computeDiff } from "./diff";
 
 describe("Plugin integration tests", () => {
 	let vaultRootDir: string;
@@ -337,5 +338,45 @@ describe("Plugin integration tests", () => {
 		assert.strictEqual(deleteFile.mock.callCount(), 1);
 		assert.strictEqual(createOldFile.mock.callCount(), 1);
 		assert.strictEqual(createNewFile.mock.callCount(), 1);
+	});
+
+	test("should write a new chunk coming from ws", async (t) => {
+		const now = new Date().toString();
+		const createFile = t.mock.method(apiClient, "createFile", (): File => {
+			return {
+				id: 1,
+				workspacePath: "files/modifiedByWs.md",
+				diskPath: "",
+				hash: "",
+				createdAt: now,
+				updatedAt: now,
+				mimeType: "",
+				workspaceId: 1,
+			};
+		});
+
+		await storage.createObject("files/modifiedByWs.md", "lorem ipsum");
+		await plugin.events.create({
+			name: "modifiedByWs.md",
+			path: "files/modifiedByWs.md",
+			vault,
+			parent: null,
+		});
+
+		assert.deepEqual(
+			plugin.getFilePathToId(),
+			new Map([["files/modifiedByWs.md", 1]]),
+		);
+
+		await plugin.onMessage({
+			fileId: 1,
+			chunks: computeDiff("lorem ipsum", "lorem bar ipsum"),
+		});
+
+		assert.deepEqual(
+			plugin.getFileIdToFile().get(1)?.content,
+			"lorem bar ipsum",
+		);
+		assert.strictEqual(createFile.mock.callCount(), 1);
 	});
 });

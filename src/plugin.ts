@@ -24,8 +24,8 @@ export class RealTimePlugin {
 		this.apiClient = apiClient;
 		this.wsClient = wsClient;
 
-		this.wsClient.registerOnMessage(this.onWsMessage.bind(this));
-		this.wsClient.registerOnError(this.onWsError.bind(this));
+		this.wsClient.registerOnMessage(this.onMessage.bind(this));
+		this.wsClient.registerOnError(this.onError.bind(this));
 		this.wsClient.registerOnClose(async (event) => {
 			if (!event.wasClean) {
 				console.error("WebSocket closed unexpectedly");
@@ -90,9 +90,7 @@ export class RealTimePlugin {
 		console.log(`fetched ${this.filePathToId.size} files from remote`);
 	}
 
-	private async onWsMessage(data: DiffChunkMessage) {
-		console.log("chunk from ws", data);
-
+	async onMessage(data: DiffChunkMessage) {
 		const { fileId, chunks } = data;
 
 		const file = this.fileIdToFile.get(fileId);
@@ -109,12 +107,9 @@ export class RealTimePlugin {
 		file.content = content;
 
 		this.fileIdToFile.set(file.id, file);
-
-		// TODO: it should send the diff between the previous content
-		// and the updated one? to advice the other clients?
 	}
 
-	private async onWsError(event: Event) {
+	async onError(event: Event) {
 		console.error(event);
 	}
 
