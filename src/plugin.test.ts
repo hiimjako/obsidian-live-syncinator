@@ -106,7 +106,7 @@ describe("Plugin integration tests", () => {
 		);
 
 		// inizializing a file in vault, to simulate misalignment
-		storage.createObject("files/alreadyInWorkspace.md", "lorem baz");
+		storage.writeObject("files/alreadyInWorkspace.md", "lorem baz");
 
 		await plugin.init();
 
@@ -355,7 +355,7 @@ describe("Plugin integration tests", () => {
 			};
 		});
 
-		await storage.createObject("files/modifiedByWs.md", "lorem ipsum");
+		await storage.writeObject("files/modifiedByWs.md", "lorem ipsum");
 		await plugin.events.create({
 			name: "modifiedByWs.md",
 			path: "files/modifiedByWs.md",

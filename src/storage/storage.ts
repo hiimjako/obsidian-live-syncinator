@@ -20,7 +20,9 @@ export class Disk {
 		return this.vault.adapter.exists(vaultPath, true);
 	}
 
-	async createObject(
+	// writeObject creates and writes to file. If the files doesn't exists it will
+	// throw an error. Use `force: true` to overwrite the file.
+	async writeObject(
 		vaultPath: string,
 		content: string,
 		{ force } = { force: false },

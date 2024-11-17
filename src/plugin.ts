@@ -50,7 +50,7 @@ export class RealTimePlugin {
 			const fileWithContent = await this.apiClient.fetchFile(file.id);
 
 			if (!exists) {
-				await this.storage.createObject(
+				await this.storage.writeObject(
 					file.workspacePath,
 					fileWithContent.content,
 				);
@@ -69,7 +69,7 @@ export class RealTimePlugin {
 					const remoteFileMtime = new Date(fileWithContent.updatedAt);
 
 					if (remoteFileMtime >= localFileMtime) {
-						await this.storage.createObject(
+						await this.storage.writeObject(
 							file.workspacePath,
 							fileWithContent.content,
 							{ force: true },

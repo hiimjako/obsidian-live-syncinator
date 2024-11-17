@@ -73,7 +73,7 @@ describe("Disk storage integration tests", () => {
 		for (const tt of tests) {
 			await test(tt.name, async () => {
 				const fileName = randomUUID();
-				await d.createObject(fileName, tt.initialContent);
+				await d.writeObject(fileName, tt.initialContent);
 
 				assert.strictEqual(await d.exists(fileName), true);
 
@@ -111,7 +111,7 @@ describe("Disk storage integration tests", () => {
 		const path = "foo/bar/baz.md";
 		const content = "hello";
 
-		await d.createObject(path, content);
+		await d.writeObject(path, content);
 		assert.strictEqual(createFolderMock.mock.callCount(), 2);
 		assert.strictEqual(existsMock.mock.callCount(), 3);
 		assert.strictEqual(writeMock.mock.callCount(), 1);
