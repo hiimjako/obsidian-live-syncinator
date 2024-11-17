@@ -24,8 +24,8 @@ export class RealTimePlugin {
 		this.apiClient = apiClient;
 		this.wsClient = wsClient;
 
-		this.wsClient.registerOnMessage(this.onWsMessage);
-		this.wsClient.registerOnError(this.onWsError);
+		this.wsClient.registerOnMessage(this.onWsMessage.bind(this));
+		this.wsClient.registerOnError(this.onWsError.bind(this));
 		this.wsClient.registerOnClose(async (event) => {
 			if (!event.wasClean) {
 				console.error("WebSocket closed unexpectedly");
