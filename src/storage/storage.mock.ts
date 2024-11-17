@@ -1,6 +1,6 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
-import type { TFolder, Vault, DataWriteOptions } from "obsidian";
+import type { TFolder, Vault, DataWriteOptions, Stat } from "obsidian";
 
 export function CreateVaultMock(basepath: string): Vault {
 	const fullPath = (p: string): string => {
@@ -29,6 +29,22 @@ export function CreateVaultMock(basepath: string): Vault {
 			): Promise<void> {
 				const vaultPath = fullPath(normalizedPath);
 				await fs.writeFile(vaultPath, data, { encoding: "utf8" });
+			},
+			async stat(normalizedPath): Promise<Stat | null> {
+				const vaultPath = fullPath(normalizedPath);
+
+				try {
+					await fs.access(vaultPath);
+					const stat = await fs.stat(vaultPath);
+					return {
+						type: stat.isFile() ? "file" : "folder",
+						size: stat.size,
+						ctime: stat.ctime.getTime(),
+						mtime: stat.mtime.getTime(),
+					} as Stat;
+				} catch {
+					return null;
+				}
 			},
 		},
 		async createFolder(normalizedPath): Promise<TFolder> {

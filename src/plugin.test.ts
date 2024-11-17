@@ -69,7 +69,7 @@ describe("Plugin integration tests", () => {
 			(): FileWithContent => ({
 				id: 2,
 				workspace_path: "files/alreadyInWorkspace.md",
-				content: "bar",
+				content: "lorem ipsum",
 				disk_path: "",
 				hash: "",
 				created_at: now,
@@ -102,7 +102,7 @@ describe("Plugin integration tests", () => {
 		);
 
 		// inizializing a file in vault, to simulate misalignment
-		storage.createObject("files/alreadyInWorkspace.md", "baz");
+		storage.createObject("files/alreadyInWorkspace.md", "lorem baz");
 
 		await plugin.init();
 
@@ -134,7 +134,7 @@ describe("Plugin integration tests", () => {
 				[
 					2,
 					{
-						content: "bar",
+						content: "lorem ipsum",
 						created_at: now,
 						disk_path: "",
 						hash: "",

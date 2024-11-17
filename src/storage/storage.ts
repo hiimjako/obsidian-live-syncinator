@@ -1,7 +1,7 @@
 import path from "path-browserify";
 import { Operation, type DiffChunk } from "../diff";
 
-import type { TAbstractFile, TFile, Vault } from "obsidian";
+import type { TAbstractFile, TFile, Vault, Stat } from "obsidian";
 import { assert } from "src/utils/assert";
 
 export class Disk {
@@ -12,13 +12,21 @@ export class Disk {
 		this.vault = vault;
 	}
 
+	async stat(vaultPath: string): Promise<Stat | null> {
+		return this.vault.adapter.stat(vaultPath);
+	}
+
 	async exists(vaultPath: string): Promise<boolean> {
 		return this.vault.adapter.exists(vaultPath, true);
 	}
 
-	async createObject(vaultPath: string, content: string): Promise<void> {
+	async createObject(
+		vaultPath: string,
+		content: string,
+		{ force } = { force: false },
+	): Promise<void> {
 		const exists = await this.exists(vaultPath);
-		if (exists) {
+		if (exists && !force) {
 			throw new Error("File already exists");
 		}
 
