@@ -1,15 +1,15 @@
 import { describe, test, afterEach, beforeEach } from "node:test";
 import assert from "node:assert";
 import WebSocket from "ws";
-import { WsClient } from "./ws";
+import { MessageType, WsClient } from "./ws";
 import getPort from "get-port";
-import type { DiffChunkMessage } from "./ws";
+import type { ChunkMessage, EventMessage } from "./ws";
 import { Operation } from "./diff";
 
 describe("WsClient with real WebSocket server", () => {
 	let server: WebSocket.Server;
 	let wsClient: WsClient;
-	let lastMessage: DiffChunkMessage | null;
+	let lastMessage: ChunkMessage | null;
 	let lastError: Event | null;
 
 	beforeEach(async () => {
@@ -18,9 +18,12 @@ describe("WsClient with real WebSocket server", () => {
 		lastMessage = null;
 		lastError = null;
 		wsClient = new WsClient(`127.0.0.1:${port}`);
-		wsClient.registerOnMessage(async (msg: DiffChunkMessage) => {
-			lastMessage = msg;
-		});
+		wsClient.registerOnMessage(
+			async (msg: ChunkMessage) => {
+				lastMessage = msg;
+			},
+			async (_: EventMessage) => { },
+		);
 		wsClient.registerOnError(async (err: Event) => {
 			lastError = err;
 		});
@@ -39,8 +42,9 @@ describe("WsClient with real WebSocket server", () => {
 	});
 
 	test("should send a message to the WebSocket server", (_, done) => {
-		const message: DiffChunkMessage = {
+		const message: ChunkMessage = {
 			fileId: 123,
+			type: MessageType.Chunk,
 			chunks: [{ type: Operation.DiffAdd, position: 0, len: 0, text: "" }],
 		};
 
@@ -58,8 +62,9 @@ describe("WsClient with real WebSocket server", () => {
 	});
 
 	test("should receive a message from the WebSocket server", (_, done) => {
-		const message: DiffChunkMessage = {
+		const message: ChunkMessage = {
 			fileId: 123,
+			type: MessageType.Chunk,
 			chunks: [],
 		};
 

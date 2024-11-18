@@ -1,9 +1,22 @@
+import { copyFileSync } from "node:fs";
 import type { DiffChunk } from "./diff";
 
-export type DiffChunkMessage = {
+export enum MessageType {
+	Chunk = 0,
+	Create = 1,
+	Delete = 2,
+}
+
+export interface MessageHeader {
 	fileId: number;
+	type: MessageType;
+}
+
+export interface ChunkMessage extends MessageHeader {
 	chunks: DiffChunk[];
-};
+}
+
+export interface EventMessage extends MessageHeader { }
 
 export class WsClient {
 	private ws: WebSocket;
@@ -20,13 +33,30 @@ export class WsClient {
 		this.ws.addEventListener("error", fn);
 	}
 
-	registerOnMessage(fn: (_: DiffChunkMessage) => Promise<void>) {
+	registerOnMessage(
+		chunkMessage: (_: ChunkMessage) => Promise<void>,
+		eventMessage: (_: EventMessage) => Promise<void>,
+	) {
 		this.ws.addEventListener(
 			"message",
-			async function message(event: MessageEvent<DiffChunkMessage>) {
+			async function message(event: MessageEvent<string>) {
 				try {
-					const msg = JSON.parse(event.data.toString());
-					await fn(msg);
+					const msg: ChunkMessage | EventMessage = JSON.parse(
+						event.data.toString(),
+					);
+
+					console.log(msg);
+					switch (msg.type) {
+						case MessageType.Chunk:
+							await chunkMessage(msg as ChunkMessage);
+							break;
+						case MessageType.Create:
+						case MessageType.Delete:
+							await eventMessage(msg as EventMessage);
+							break;
+						default:
+							console.log("message type:", msg.type, "not supported");
+					}
 				} catch (err) {
 					console.error(err);
 				}
@@ -34,7 +64,7 @@ export class WsClient {
 		);
 	}
 
-	sendMessage(msg: DiffChunkMessage) {
+	sendMessage(msg: ChunkMessage) {
 		const msgJson = JSON.stringify(msg);
 		this.ws.send(msgJson);
 	}

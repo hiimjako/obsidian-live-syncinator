@@ -2,7 +2,7 @@ import type { TAbstractFile } from "obsidian";
 import type { ApiClient, FileWithContent } from "./api";
 import { computeDiff, Operation } from "./diff";
 import type { Disk } from "./storage/storage";
-import type { DiffChunkMessage, WsClient } from "./ws";
+import type { ChunkMessage, EventMessage, WsClient } from "./ws";
 
 export interface Events {
 	create(file: TAbstractFile): Promise<void>;
@@ -24,7 +24,10 @@ export class RealTimePlugin {
 		this.apiClient = apiClient;
 		this.wsClient = wsClient;
 
-		this.wsClient.registerOnMessage(this.onMessage.bind(this));
+		this.wsClient.registerOnMessage(
+			this.onChunkMessage.bind(this),
+			this.onEventMessage.bind(this),
+		);
 		this.wsClient.registerOnError(this.onError.bind(this));
 		this.wsClient.registerOnClose(async (event) => {
 			if (!event.wasClean) {
@@ -68,6 +71,8 @@ export class RealTimePlugin {
 					const localFileMtime = new Date(stat?.mtime ?? 0);
 					const remoteFileMtime = new Date(fileWithContent.updatedAt);
 
+					console.log(remoteFileMtime, localFileMtime);
+
 					if (remoteFileMtime >= localFileMtime) {
 						await this.storage.writeObject(
 							file.workspacePath,
@@ -90,7 +95,8 @@ export class RealTimePlugin {
 		console.log(`fetched ${this.filePathToId.size} files from remote`);
 	}
 
-	async onMessage(data: DiffChunkMessage) {
+	async onChunkMessage(data: ChunkMessage) {
+		console.log("chunk", data);
 		const { fileId, chunks } = data;
 
 		const file = this.fileIdToFile.get(fileId);
@@ -107,6 +113,10 @@ export class RealTimePlugin {
 		file.content = content;
 
 		this.fileIdToFile.set(file.id, file);
+	}
+
+	async onEventMessage(data: EventMessage) {
+		console.log("event", data);
 	}
 
 	async onError(event: Event) {
@@ -146,11 +156,12 @@ export class RealTimePlugin {
 		const newContent = await this.storage.readObject(file.path);
 		const chunks = computeDiff(currentFile.content, newContent);
 
+		const oldContent = currentFile.content;
 		currentFile.content = newContent;
 		this.fileIdToFile.set(fileId, currentFile);
 
 		if (chunks.length > 0) {
-			console.log("modify", { fileId, chunks });
+			console.log("modify", { fileId, chunks, oldContent, newContent });
 			this.wsClient.sendMessage({ fileId, chunks });
 		}
 	}

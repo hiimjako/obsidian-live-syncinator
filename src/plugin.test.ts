@@ -5,7 +5,7 @@ import { CreateVaultMock } from "./storage/storage.mock";
 import fs from "node:fs/promises";
 import { ApiClient, type FileWithContent, type File } from "./api";
 import { HttpClient } from "./http";
-import { WsClient } from "./ws";
+import { MessageType, WsClient } from "./ws";
 import type { Vault } from "obsidian";
 import assert from "node:assert";
 import { computeDiff } from "./diff";
@@ -368,7 +368,8 @@ describe("Plugin integration tests", () => {
 			new Map([["files/modifiedByWs.md", 1]]),
 		);
 
-		await plugin.onMessage({
+		await plugin.onChunkMessage({
+			type: MessageType.Chunk,
 			fileId: 1,
 			chunks: computeDiff("lorem ipsum", "lorem bar ipsum"),
 		});
