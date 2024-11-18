@@ -134,8 +134,7 @@ export class RealTimePlugin {
 				content: "",
 			});
 			this.storage.writeObject(fileApi.workspacePath, fileApi.content);
-		}
-		if (event.type === MessageType.Delete) {
+		} else if (event.type === MessageType.Delete) {
 			const file = this.fileIdToFile.get(event.fileId);
 			if (!file) {
 				console.warn(
@@ -144,6 +143,31 @@ export class RealTimePlugin {
 				return;
 			}
 			this.storage.deleteObject(file.workspacePath);
+		} else if (event.type === MessageType.Rename) {
+			const file = this.fileIdToFile.get(event.fileId);
+			if (!file) {
+				console.warn(
+					`cannot delete file ${event.fileId} as it is not present in current workspace`,
+				);
+				return;
+			}
+
+			const fileApi = await this.apiClient.fetchFile(event.fileId);
+			const oldPath = file.workspacePath;
+			this.filePathToId.delete(oldPath);
+			this.filePathToId.set(fileApi.workspacePath, fileApi.id);
+
+			const updatedFile = this.fileIdToFile.get(fileApi.id);
+			if (updatedFile) {
+				updatedFile.workspacePath = fileApi.workspacePath;
+				this.fileIdToFile.set(fileApi.id, updatedFile);
+			} else {
+				console.error(`file ${oldPath} to ${fileApi.workspacePath} not found`);
+			}
+
+			this.storage.rename(oldPath, fileApi.workspacePath);
+		} else {
+			console.error(`unknown event ${event}`);
 		}
 	}
 
@@ -151,6 +175,7 @@ export class RealTimePlugin {
 		console.error(event);
 	}
 
+	// FIXME: avoid to trigger again create on ws event
 	private async create(file: TAbstractFile) {
 		if (this.filePathToId.has(file.path)) {
 			return;
@@ -163,6 +188,12 @@ export class RealTimePlugin {
 				...fileApi,
 				content: "",
 			});
+
+			const msg: EventMessage = {
+				type: MessageType.Create,
+				fileId: fileApi.id,
+			};
+			this.wsClient.sendMessage(msg);
 		} catch (error) {
 			console.error(error);
 		}
@@ -190,10 +221,17 @@ export class RealTimePlugin {
 
 		if (chunks.length > 0) {
 			console.log("modify", { fileId, chunks, oldContent, newContent });
-			this.wsClient.sendMessage({ type: MessageType.Chunk, fileId, chunks });
+
+			const msg: ChunkMessage = {
+				type: MessageType.Chunk,
+				fileId: fileId,
+				chunks,
+			};
+			this.wsClient.sendMessage(msg);
 		}
 	}
 
+	// FIXME: avoid to trigger again delete on ws event
 	private async delete(file: TAbstractFile) {
 		const fileId = this.filePathToId.get(file.path);
 		if (!fileId) {
@@ -205,27 +243,49 @@ export class RealTimePlugin {
 			await this.apiClient.deleteFile(fileId);
 			this.fileIdToFile.delete(fileId);
 			this.filePathToId.delete(file.path);
+
+			const msg: EventMessage = {
+				type: MessageType.Delete,
+				fileId: fileId,
+			};
+			this.wsClient.sendMessage(msg);
 		} catch (error) {
 			console.error(error);
 		}
 	}
 
+	// FIXME: avoid to trigger again rename on ws event
 	private async rename(file: TAbstractFile, oldPath: string) {
-		const oldFileId = this.filePathToId.get(oldPath);
-		if (!oldFileId) {
+		const fileId = this.filePathToId.get(oldPath);
+		if (!fileId) {
 			console.error(`missing file for rename: ${oldPath}`);
 			return;
 		}
 
 		try {
+			await this.apiClient.updateFile(fileId, file.path);
+
 			this.filePathToId.delete(oldPath);
-			this.fileIdToFile.delete(oldFileId);
-			await this.apiClient.deleteFile(oldFileId);
+			this.filePathToId.set(file.path, fileId);
+
+			const updatedFile = this.fileIdToFile.get(fileId);
+			if (updatedFile) {
+				updatedFile.workspacePath = file.path;
+				this.fileIdToFile.set(fileId, updatedFile);
+			} else {
+				console.error(`file ${oldPath} to ${file.path} not found`);
+			}
+
+			// First we create the file so the other clients can fetch it on event
+			const msg: EventMessage = {
+				type: MessageType.Rename,
+				fileId: fileId,
+			};
+			this.wsClient.sendMessage(msg);
 		} catch (error) {
 			console.error(error);
+			return;
 		}
-
-		await this.create(file);
 	}
 
 	getFilePathToId(): Map<string, number> {

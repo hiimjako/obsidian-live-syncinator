@@ -46,6 +46,9 @@ export function CreateVaultMock(basepath: string): Vault {
 					return null;
 				}
 			},
+			rename(normalizedPath, normalizedNewPath) {
+				fs.rename(normalizedPath, normalizedNewPath);
+			},
 		},
 		async createFolder(normalizedPath): Promise<TFolder> {
 			const vaultPath = fullPath(normalizedPath);

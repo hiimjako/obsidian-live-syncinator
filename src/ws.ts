@@ -1,10 +1,10 @@
-import { copyFileSync } from "node:fs";
 import type { DiffChunk } from "./diff";
 
 export enum MessageType {
 	Chunk = 0,
 	Create = 1,
 	Delete = 2,
+	Rename = 3,
 }
 
 export interface MessageHeader {
@@ -52,6 +52,7 @@ export class WsClient {
 							break;
 						case MessageType.Create:
 						case MessageType.Delete:
+						case MessageType.Rename:
 							await eventMessage(msg as EventMessage);
 							break;
 						default:
@@ -64,7 +65,7 @@ export class WsClient {
 		);
 	}
 
-	sendMessage(msg: ChunkMessage) {
+	sendMessage(msg: ChunkMessage | EventMessage) {
 		const msgJson = JSON.stringify(msg);
 		this.ws.send(msgJson);
 	}

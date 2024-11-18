@@ -20,6 +20,10 @@ export class Disk {
 		return this.vault.adapter.exists(vaultPath, true);
 	}
 
+	async rename(oldVaultPath: string, newVaultPath: string): Promise<void> {
+		return this.vault.adapter.rename(oldVaultPath, newVaultPath);
+	}
+
 	// writeObject creates and writes to file. If the files doesn't exists it will
 	// throw an error. Use `force: true` to overwrite the file.
 	async writeObject(
@@ -66,7 +70,7 @@ export class Disk {
 		const file = this.vault.getFileByPath(vaultPath);
 
 		if (file == null) {
-			throw new Error("File doesn't exists");
+			throw new Error(`file '${vaultPath}' doesn't exists`);
 		}
 
 		const v = await this.vault.cachedRead(file);
@@ -74,7 +78,7 @@ export class Disk {
 	}
 
 	async persistChunks(vaultPath: string, chunks: DiffChunk[]): Promise<string> {
-		assert(chunks !== null, `chunks for ${vaultPath} are null`);
+		assert(chunks !== null, `chunks for '${vaultPath}' are null`);
 
 		let content = "";
 
@@ -107,7 +111,7 @@ export class Disk {
 	): Promise<string> {
 		const file = this.vault.getFileByPath(vaultPath);
 		if (file == null) {
-			throw new Error("File doesn't exists");
+			throw new Error(`file '${vaultPath}' doesn't exists`);
 		}
 
 		return await this.vault.process(file, (data) => {
@@ -122,7 +126,7 @@ export class Disk {
 	): Promise<string> {
 		const file = this.vault.getFileByPath(vaultPath);
 		if (file == null) {
-			throw new Error("File doesn't exists");
+			throw new Error(`file '${vaultPath}' doesn't exists`);
 		}
 
 		return await this.vault.process(file, (data) => {

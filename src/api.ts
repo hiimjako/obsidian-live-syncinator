@@ -21,6 +21,10 @@ declare interface CreateFile {
 	content: string;
 }
 
+declare interface UpdateFile {
+	path: string;
+}
+
 interface WorkspaceCredentials {
 	name: string;
 	password: string;
@@ -68,6 +72,16 @@ export class ApiClient {
 		}
 
 		return res.data ?? {};
+	}
+
+	async updateFile(fileId: number, path: string): Promise<void> {
+		const body: UpdateFile = { path };
+
+		const res = await this.client.patch<void>(`/v1/api/file/${fileId}`, body);
+
+		if (res.status !== StatusCodes.NO_CONTENT) {
+			throw new Error(`error while updating file: ${res.data}`);
+		}
 	}
 
 	async deleteFile(fileId: number): Promise<void> {

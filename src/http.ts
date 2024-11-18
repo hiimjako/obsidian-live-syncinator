@@ -2,6 +2,7 @@ enum HttpMethod {
 	GET = "GET",
 	POST = "POST",
 	DELETE = "DELETE",
+	PATCH = "PATCH",
 }
 
 type FetchResponse<T> = {
@@ -73,6 +74,18 @@ export class HttpClient {
 	): Promise<FetchResponse<T>> {
 		return this.request<T>(endpoint, {
 			method: HttpMethod.POST,
+			headers,
+			body: JSON.stringify(body),
+		});
+	}
+
+	public patch<T>(
+		endpoint: string,
+		body: object,
+		headers: Record<string, string> = {},
+	): Promise<FetchResponse<T>> {
+		return this.request<T>(endpoint, {
+			method: HttpMethod.PATCH,
 			headers,
 			body: JSON.stringify(body),
 		});
