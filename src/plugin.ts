@@ -2,7 +2,12 @@ import type { TAbstractFile } from "obsidian";
 import type { ApiClient, FileWithContent } from "./api";
 import { computeDiff, Operation } from "./diff";
 import type { Disk } from "./storage/storage";
-import type { ChunkMessage, EventMessage, WsClient } from "./ws";
+import {
+	MessageType,
+	type ChunkMessage,
+	type EventMessage,
+	type WsClient,
+} from "./ws";
 
 export interface Events {
 	create(file: TAbstractFile): Promise<void>;
@@ -115,8 +120,31 @@ export class RealTimePlugin {
 		this.fileIdToFile.set(file.id, file);
 	}
 
-	async onEventMessage(data: EventMessage) {
-		console.log("event", data);
+	async onEventMessage(event: EventMessage) {
+		console.log("event", event);
+
+		// note the maps that keep track of the current files will be updated
+		// in the create and delete events, as creating a file will trigger
+		// this functions
+		if (event.type === MessageType.Create) {
+			const fileApi = await this.apiClient.fetchFile(event.fileId);
+			this.filePathToId.set(fileApi.workspacePath, fileApi.id);
+			this.fileIdToFile.set(fileApi.id, {
+				...fileApi,
+				content: "",
+			});
+			this.storage.writeObject(fileApi.workspacePath, fileApi.content);
+		}
+		if (event.type === MessageType.Delete) {
+			const file = this.fileIdToFile.get(event.fileId);
+			if (!file) {
+				console.warn(
+					`cannot delete file ${event.fileId} as it is not present in current workspace`,
+				);
+				return;
+			}
+			this.storage.deleteObject(file.workspacePath);
+		}
 	}
 
 	async onError(event: Event) {
@@ -162,7 +190,7 @@ export class RealTimePlugin {
 
 		if (chunks.length > 0) {
 			console.log("modify", { fileId, chunks, oldContent, newContent });
-			this.wsClient.sendMessage({ fileId, chunks });
+			this.wsClient.sendMessage({ type: MessageType.Chunk, fileId, chunks });
 		}
 	}
 
@@ -175,6 +203,7 @@ export class RealTimePlugin {
 
 		try {
 			await this.apiClient.deleteFile(fileId);
+			this.fileIdToFile.delete(fileId);
 			this.filePathToId.delete(file.path);
 		} catch (error) {
 			console.error(error);
