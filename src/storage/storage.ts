@@ -67,11 +67,22 @@ export class Disk {
 		await this.vault.delete(toDelete, true);
 	}
 
-	async listFiles(markdownOnly = false): Promise<TFile[]> {
+	async listFiles({
+		prefix = "",
+		markdownOnly = false,
+	} = {}): Promise<TFile[]> {
+		let files: TFile[] = [];
 		if (markdownOnly) {
-			return this.vault.getMarkdownFiles();
+			files = this.vault.getMarkdownFiles();
+		} else {
+			files = this.vault.getFiles();
 		}
-		return this.vault.getFiles();
+
+		if (prefix) {
+			files = files.filter((file) => file.path.startsWith(prefix));
+		}
+
+		return files;
 	}
 
 	async readObject(vaultPath: string): Promise<string> {

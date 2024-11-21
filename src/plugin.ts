@@ -51,6 +51,7 @@ export class RealTimePlugin {
 	async init() {
 		const files = await this.apiClient.fetchFiles();
 
+		console.log(files);
 		for (const file of files) {
 			this.filePathToId.set(file.workspacePath, file.id);
 
@@ -183,6 +184,12 @@ export class RealTimePlugin {
 
 		const stat = await this.storage.stat(file.path);
 		if (stat?.type === "folder") {
+			const msg: EventMessage = {
+				type: MessageType.Create,
+				fileId: 0,
+				objectType: "folder",
+			};
+			this.wsClient.sendMessage(msg);
 			return;
 		}
 
@@ -197,6 +204,7 @@ export class RealTimePlugin {
 			const msg: EventMessage = {
 				type: MessageType.Create,
 				fileId: fileApi.id,
+				objectType: "file",
 			};
 			this.wsClient.sendMessage(msg);
 		} catch (error) {
@@ -238,9 +246,18 @@ export class RealTimePlugin {
 
 	// FIXME: avoid to trigger again delete on ws event
 	private async delete(file: TAbstractFile) {
+		console.log(file);
 		const fileId = this.filePathToId.get(file.path);
 		if (!fileId) {
-			console.error(`missing file for deletion: ${file.path}`);
+			console.error(
+				`missing file for deletion: ${file.path}, probably a folder`,
+			);
+			const msg: EventMessage = {
+				type: MessageType.Delete,
+				fileId: 0,
+				objectType: "folder",
+			};
+			this.wsClient.sendMessage(msg);
 			return;
 		}
 
@@ -252,6 +269,7 @@ export class RealTimePlugin {
 			const msg: EventMessage = {
 				type: MessageType.Delete,
 				fileId: fileId,
+				objectType: "file",
 			};
 			this.wsClient.sendMessage(msg);
 		} catch (error) {
@@ -263,7 +281,13 @@ export class RealTimePlugin {
 	private async rename(file: TAbstractFile, oldPath: string) {
 		const fileId = this.filePathToId.get(oldPath);
 		if (!fileId) {
-			console.error(`missing file for rename: ${oldPath}`);
+			console.error(`missing file for rename: ${oldPath}, probably a folder`);
+			const msg: EventMessage = {
+				type: MessageType.Rename,
+				fileId: 0,
+				objectType: "folder",
+			};
+			this.wsClient.sendMessage(msg);
 			return;
 		}
 
@@ -285,6 +309,7 @@ export class RealTimePlugin {
 			const msg: EventMessage = {
 				type: MessageType.Rename,
 				fileId: fileId,
+				objectType: "file",
 			};
 			this.wsClient.sendMessage(msg);
 		} catch (error) {

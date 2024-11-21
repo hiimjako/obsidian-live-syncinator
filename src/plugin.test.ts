@@ -9,7 +9,6 @@ import { type EventMessage, MessageType, WsClient } from "./ws";
 import type { Vault } from "obsidian";
 import assert from "node:assert";
 import { computeDiff } from "./diff";
-import { rename } from "node:fs";
 
 describe("Plugin integration tests", () => {
 	let vaultRootDir: string;
@@ -215,6 +214,7 @@ describe("Plugin integration tests", () => {
 		assert.strictEqual(sendMessage.mock.callCount(), 1);
 		assert.deepEqual(sendMessage.mock.calls[0].arguments[0], {
 			type: MessageType.Create,
+			objectType: "file",
 			fileId: 1,
 		} as EventMessage);
 	});
@@ -261,6 +261,88 @@ describe("Plugin integration tests", () => {
 		assert.strictEqual(sendMessage.mock.callCount(), 2);
 		assert.deepEqual(sendMessage.mock.calls[1].arguments[0], {
 			type: MessageType.Delete,
+			objectType: "file",
+			fileId: 1,
+		} as EventMessage);
+	});
+
+	test("should delete a folder on 'delete'", async (t) => {
+		const deleteFile = t.mock.method(apiClient, "deleteFile", () => { });
+		const createFile = t.mock.method(
+			apiClient,
+			"createFile",
+			(): File => {
+				return {
+					id: 1,
+					workspacePath: "files/anotherFile.md",
+					diskPath: "",
+					hash: "",
+					createdAt: new Date().toString(),
+					updatedAt: new Date().toString(),
+					mimeType: "",
+					workspaceId: 1,
+				};
+			},
+			{ times: 1 },
+		);
+		const createFile2 = t.mock.method(
+			apiClient,
+			"createFile",
+			(): File => {
+				return {
+					id: 2,
+					workspacePath: "files/newFile.md",
+					diskPath: "",
+					hash: "",
+					createdAt: new Date().toString(),
+					updatedAt: new Date().toString(),
+					mimeType: "",
+					workspaceId: 1,
+				};
+			},
+			{ times: 1 },
+		);
+
+		const sendMessage = t.mock.method(wsClient, "sendMessage", () => { });
+
+		await plugin.events.create({
+			name: "newFile.md",
+			path: "files/newFile.md",
+			vault,
+			parent: null,
+		});
+
+		await plugin.events.create({
+			name: "anotherFile.md",
+			path: "files/anotherFile.md",
+			vault,
+			parent: null,
+		});
+
+		assert.deepEqual(
+			plugin.getFilePathToId(),
+			new Map([
+				["files/anotherFile.md", 1],
+				["files/newFile.md", 2],
+			]),
+		);
+
+		await plugin.events.delete({
+			name: "files",
+			path: "files",
+			vault,
+			parent: null,
+		});
+
+		assert.deepEqual(plugin.getFilePathToId(), new Map());
+		assert.strictEqual(deleteFile.mock.callCount(), 1);
+		assert.strictEqual(createFile2.mock.callCount(), 1);
+		assert.strictEqual(createFile.mock.callCount(), 1);
+		// one call for create and the second for delete
+		assert.strictEqual(sendMessage.mock.callCount(), 2);
+		assert.deepEqual(sendMessage.mock.calls[1].arguments[0], {
+			type: MessageType.Delete,
+			objectType: "folder",
 			fileId: 1,
 		} as EventMessage);
 	});
@@ -343,6 +425,7 @@ describe("Plugin integration tests", () => {
 		// ignore the first for creation
 		assert.deepEqual(sendMessage.mock.calls[1].arguments[0], {
 			type: MessageType.Rename,
+			objectType: "file",
 			fileId: 1,
 		} as EventMessage);
 	});

@@ -97,6 +97,37 @@ describe("Disk storage integration tests", () => {
 		});
 	});
 
+	test("should list files", async () => {
+		const d = new Disk(v);
+
+		const path1 = "folder/file1.md";
+		const path2 = "folder/file2.png";
+		const path3 = "anotherFolder/file1.md";
+		await d.writeObject(path1, "");
+		await d.writeObject(path2, "");
+		await d.writeObject(path3, "");
+
+		/*@ts-ignore*/
+		const listFilesNames = async (opts = {}): Promise<string[]> => {
+			const files = await d.listFiles(opts);
+			return files.map((file) => file.path);
+		};
+
+		assert.deepEqual(await listFilesNames(), [path3, path1, path2]);
+		assert.deepEqual(await listFilesNames({ prefix: "folder" }), [
+			path1,
+			path2,
+		]);
+		assert.deepEqual(await listFilesNames({ markdownOnly: true }), [
+			path3,
+			path1,
+		]);
+		assert.deepEqual(
+			await listFilesNames({ prefix: "folder", markdownOnly: true }),
+			[path1],
+		);
+	});
+
 	test("should create, read, and delete objects correctly", async (t) => {
 		const createFolderMock = t.mock.method(v, "createFolder");
 		const getFileByPath = t.mock.method(v, "getFileByPath");

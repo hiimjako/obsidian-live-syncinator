@@ -16,7 +16,9 @@ export interface ChunkMessage extends MessageHeader {
 	chunks: DiffChunk[];
 }
 
-export interface EventMessage extends MessageHeader { }
+export interface EventMessage extends MessageHeader {
+	objectType: "file" | "folder";
+}
 
 export class WsClient {
 	private ws: WebSocket;

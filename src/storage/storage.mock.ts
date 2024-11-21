@@ -1,6 +1,7 @@
-import { promises as fs } from "node:fs";
-import path from "node:path";
-import type { TFolder, Vault, DataWriteOptions, Stat } from "obsidian";
+import { kMaxLength } from "node:buffer";
+import { promises as fs, readdirSync, statSync } from "node:fs";
+import path, { basename } from "node:path";
+import type { TFolder, Vault, DataWriteOptions, Stat, TFile } from "obsidian";
 
 export function CreateVaultMock(basepath: string): Vault {
 	const fullPath = (p: string): string => {
@@ -70,6 +71,77 @@ export function CreateVaultMock(basepath: string): Vault {
 			const newData = fn(data);
 			await fs.writeFile(vaultPath, newData, { encoding: "utf8" });
 			return newData;
+		},
+		getFiles() {
+			const vaultPath = basepath;
+			const filenames: TFile[] = [];
+
+			let subGetFiles: (basepath: string, subPath: string) => void = () => {};
+			subGetFiles = (basepath: string, subPath: string) => {
+				const items = readdirSync(path.join(basepath, subPath));
+
+				for (const item of items) {
+					const vaultPath = path.join(subPath, item);
+					const itemPath = path.join(basepath, vaultPath);
+					const stat = statSync(itemPath);
+					if (stat.isDirectory()) {
+						subGetFiles(basepath, vaultPath);
+					} else {
+						filenames.push({
+							path: vaultPath,
+							vault: v,
+							stat: {
+								size: stat.size,
+								ctime: stat.ctime.getTime(),
+								mtime: stat.mtime.getTime(),
+							},
+							name: path.basename(vaultPath, path.extname(vaultPath)),
+							basename: path.basename(vaultPath),
+							parent: null,
+							extension: path.extname(vaultPath),
+						});
+					}
+				}
+			};
+
+			subGetFiles(vaultPath, "");
+
+			return filenames;
+		},
+		getMarkdownFiles() {
+			const filenames: TFile[] = [];
+
+			let subGetFiles: (basepath: string, subPath: string) => void = () => {};
+			subGetFiles = (basepath: string, subPath: string) => {
+				const items = readdirSync(path.join(basepath, subPath));
+
+				for (const item of items) {
+					const vaultPath = path.join(subPath, item);
+					const itemPath = path.join(basepath, vaultPath);
+					const stat = statSync(itemPath);
+					if (stat.isDirectory()) {
+						subGetFiles(basepath, vaultPath);
+					} else if (vaultPath.endsWith(".md")) {
+						filenames.push({
+							path: vaultPath,
+							vault: v,
+							stat: {
+								size: stat.size,
+								ctime: stat.ctime.getTime(),
+								mtime: stat.mtime.getTime(),
+							},
+							name: path.basename(vaultPath, path.extname(vaultPath)),
+							basename: path.basename(vaultPath),
+							parent: null,
+							extension: path.extname(vaultPath),
+						});
+					}
+				}
+			};
+
+			subGetFiles(basepath, "");
+
+			return filenames;
 		},
 		getFileByPath(normalizedPath) {
 			return {
