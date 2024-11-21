@@ -181,6 +181,11 @@ export class RealTimePlugin {
 			return;
 		}
 
+		const stat = await this.storage.stat(file.path);
+		if (stat?.type === "folder") {
+			return;
+		}
+
 		try {
 			const fileApi = await this.apiClient.createFile(file.path, "");
 			this.filePathToId.set(fileApi.workspacePath, fileApi.id);

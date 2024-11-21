@@ -21,6 +21,14 @@ export class Disk {
 	}
 
 	async rename(oldVaultPath: string, newVaultPath: string): Promise<void> {
+		const dirs = this.getIncrementalDirectories(newVaultPath);
+		for (const dir of dirs) {
+			const exists = await this.exists(dir);
+			if (!exists) {
+				await this.vault.createFolder(dir);
+			}
+		}
+
 		return this.vault.adapter.rename(oldVaultPath, newVaultPath);
 	}
 
