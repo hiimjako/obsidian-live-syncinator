@@ -1,6 +1,6 @@
 import type { App } from "obsidian";
 import { Setting, PluginSettingTab } from "obsidian";
-import type RealTimeSync from "../main";
+import type Syncinator from "../main";
 
 export interface PluginSettings {
 	domain: string;
@@ -17,9 +17,9 @@ export const DEFAULT_SETTINGS: PluginSettings = {
 };
 
 export class SettingTab extends PluginSettingTab {
-	plugin: RealTimeSync;
+	plugin: Syncinator;
 
-	constructor(app: App, plugin: RealTimeSync) {
+	constructor(app: App, plugin: Syncinator) {
 		super(app, plugin);
 		this.plugin = plugin;
 	}

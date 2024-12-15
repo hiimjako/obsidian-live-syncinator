@@ -19,6 +19,7 @@ export interface ChunkMessage extends MessageHeader {
 export interface EventMessage extends MessageHeader {
 	workspacePath: string;
 	objectType: "file" | "folder";
+	fetchFromRemote?: boolean;
 }
 
 export class WsClient {
