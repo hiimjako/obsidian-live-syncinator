@@ -1,7 +1,7 @@
 {
-	"name": "obsidian-sample-plugin",
+	"name": "obsidian-live-syncinator",
 	"version": "1.0.0",
-	"description": "This is a sample plugin for Obsidian (https://obsidian.md)",
+	"description": "Plugin to sync obsidian workspaces",
 	"main": "main.js",
 	"scripts": {
 		"test": "node --import tsx --test-reporter spec --test './src/**/*.test.ts' './src/*.test.ts' --test-timeout=30s",

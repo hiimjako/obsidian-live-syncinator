@@ -9,9 +9,9 @@ import { WsClient } from "src/ws";
 import { HttpClient } from "src/http";
 import { ApiClient } from "src/api";
 import { Disk } from "src/storage/storage";
-import { RealTimePlugin } from "src/plugin";
+import { Syncinator as SyncinatorPlugin } from "src/plugin";
 
-export default class RealTimeSync extends Plugin {
+export default class Syncinator extends Plugin {
 	settings: PluginSettings = DEFAULT_SETTINGS;
 	private statusBar: HTMLElement;
 	private uploadingFiles = 0;
@@ -35,11 +35,7 @@ export default class RealTimeSync extends Plugin {
 	}
 
 	async registerEvents() {
-		const plugin = new RealTimePlugin(
-			this.storage,
-			this.apiClient,
-			this.wsClient,
-		);
+		const plugin = new SyncinatorPlugin(this.storage, this.apiClient, this.wsClient);
 
 		await plugin.init();
 
@@ -75,7 +71,7 @@ export default class RealTimeSync extends Plugin {
 		setTimeout(async () => {
 			await this.registerEvents();
 			this.updateStatusBar();
-			new Notice("Real time sync inizialized");
+			new Notice("Obsidian Live Syncinator inizialized");
 		}, 2000);
 	}
 

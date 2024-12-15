@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, mock, test } from "node:test";
-import { RealTimePlugin } from "./plugin";
+import { Syncinator } from "./plugin";
 import { Disk } from "./storage/storage";
 import { CreateVaultMock } from "./storage/storage.mock";
 import fs from "node:fs/promises";
@@ -15,7 +15,7 @@ describe("Plugin integration tests", () => {
 	let vault: Vault;
 	let storage: Disk;
 	let apiClient: ApiClient;
-	let plugin: RealTimePlugin;
+	let plugin: Syncinator;
 	let wsClient: WsClient;
 
 	beforeEach(async () => {
@@ -29,7 +29,7 @@ describe("Plugin integration tests", () => {
 		// to remove logs on tests
 		test.mock.method(wsClient, "registerOnError", () => {});
 
-		plugin = new RealTimePlugin(storage, apiClient, wsClient);
+		plugin = new Syncinator(storage, apiClient, wsClient);
 	});
 
 	afterEach(async () => {

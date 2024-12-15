@@ -17,7 +17,7 @@ export interface Events {
 	rename(file: TAbstractFile, oldPath: string): Promise<void>;
 }
 
-export class RealTimePlugin {
+export class Syncinator {
 	private storage: Disk;
 	private filePathToId: Map<string, number> = new Map();
 	private fileIdToFile: Map<number, FileWithContent> = new Map();

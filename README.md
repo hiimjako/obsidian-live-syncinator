@@ -9,3 +9,4 @@ Drawing inspiration from the inventive naming style of Heinz Doofenshmirtz (Phin
 - Add sync for configurations
 	- Add also a settings page to decide what to sync
 - Support other file types, not only markdown.
+- Fix consistency on startup, to align local offline changes
