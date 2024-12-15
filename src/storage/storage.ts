@@ -4,11 +4,15 @@ import { Operation, type DiffChunk } from "../diff";
 import type { TAbstractFile, TFile, Vault, Stat } from "obsidian";
 import { assert } from "src/utils/assert";
 
+export type WriteOptions = {
+	force?: boolean;
+	isDir?: boolean;
+};
+
 export class Disk {
 	private vault: Vault;
 
 	constructor(vault: Vault) {
-		vault.createFolder;
 		this.vault = vault;
 	}
 
@@ -37,11 +41,13 @@ export class Disk {
 	async writeObject(
 		vaultPath: string,
 		content: string,
-		{ force } = { force: false },
+		opts: WriteOptions = { force: false, isDir: false },
 	): Promise<void> {
+		const { force, isDir } = opts;
+
 		const exists = await this.exists(vaultPath);
 		if (exists && !force) {
-			throw new Error("File already exists");
+			throw new Error(`${isDir ? "Folder" : "File"} already exists`);
 		}
 
 		const dirs = this.getIncrementalDirectories(vaultPath);
@@ -52,19 +58,26 @@ export class Disk {
 			}
 		}
 
-		await this.vault.adapter.write(vaultPath, content);
+		if (isDir) {
+			await this.vault.createFolder(vaultPath);
+		} else {
+			await this.vault.adapter.write(vaultPath, content);
+		}
 	}
 
-	async deleteObject(vaultPath: string): Promise<void> {
+	async deleteObject(
+		vaultPath: string,
+		{ force } = { force: false },
+	): Promise<void> {
 		const file = this.vault.getFileByPath(vaultPath);
 		const folder = this.vault.getFolderByPath(vaultPath);
 
 		const toDelete: TAbstractFile | null = file ?? folder;
 		if (toDelete == null) {
-			throw new Error("File already exists");
+			return;
 		}
 
-		await this.vault.delete(toDelete, true);
+		await this.vault.delete(toDelete, force);
 	}
 
 	async listFiles({
@@ -163,6 +176,10 @@ export class Disk {
 		}
 
 		directories.pop();
+
+		if (filePath.endsWith(path.sep)) {
+			directories.push(filePath);
+		}
 
 		return directories;
 	}

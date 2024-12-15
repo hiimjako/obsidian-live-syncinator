@@ -27,7 +27,7 @@ describe("Plugin integration tests", () => {
 		wsClient = new WsClient("localhost");
 
 		// to remove logs on tests
-		test.mock.method(wsClient, "registerOnError", () => { });
+		test.mock.method(wsClient, "registerOnError", () => {});
 
 		plugin = new RealTimePlugin(storage, apiClient, wsClient);
 	});
@@ -170,7 +170,7 @@ describe("Plugin integration tests", () => {
 				workspaceId: 1,
 			};
 		});
-		const sendMessage = t.mock.method(wsClient, "sendMessage", () => { });
+		const sendMessage = t.mock.method(wsClient, "sendMessage", () => {});
 
 		await plugin.events.create({
 			name: "newFile.md",
@@ -216,11 +216,12 @@ describe("Plugin integration tests", () => {
 			type: MessageType.Create,
 			objectType: "file",
 			fileId: 1,
+			workspacePath: "files/newFile.md",
 		} as EventMessage);
 	});
 
 	test("should delete a file on 'delete'", async (t) => {
-		const deleteFile = t.mock.method(apiClient, "deleteFile", () => { });
+		const deleteFile = t.mock.method(apiClient, "deleteFile", () => {});
 		const createFile = t.mock.method(apiClient, "createFile", (): File => {
 			return {
 				id: 1,
@@ -233,7 +234,7 @@ describe("Plugin integration tests", () => {
 				workspaceId: 1,
 			};
 		});
-		const sendMessage = t.mock.method(wsClient, "sendMessage", () => { });
+		const sendMessage = t.mock.method(wsClient, "sendMessage", () => {});
 
 		await plugin.events.create({
 			name: "newFile.md",
@@ -263,11 +264,12 @@ describe("Plugin integration tests", () => {
 			type: MessageType.Delete,
 			objectType: "file",
 			fileId: 1,
+			workspacePath: "files/newFile.md",
 		} as EventMessage);
 	});
 
 	test("should delete a folder on 'delete'", async (t) => {
-		const deleteFile = t.mock.method(apiClient, "deleteFile", () => { });
+		const deleteFile = t.mock.method(apiClient, "deleteFile", () => {});
 		const createFile = t.mock.method(
 			apiClient,
 			"createFile",
@@ -302,8 +304,32 @@ describe("Plugin integration tests", () => {
 			},
 			{ times: 1 },
 		);
+		const createFile3 = t.mock.method(
+			apiClient,
+			"createFile",
+			(): File => {
+				return {
+					id: 3,
+					workspacePath: "files.md",
+					diskPath: "",
+					hash: "",
+					createdAt: new Date().toString(),
+					updatedAt: new Date().toString(),
+					mimeType: "",
+					workspaceId: 1,
+				};
+			},
+			{ times: 1 },
+		);
 
-		const sendMessage = t.mock.method(wsClient, "sendMessage", () => { });
+		const sendMessage = t.mock.method(wsClient, "sendMessage", () => {});
+
+		await plugin.events.create({
+			name: "files.md",
+			path: "files.md",
+			vault,
+			parent: null,
+		});
 
 		await plugin.events.create({
 			name: "newFile.md",
@@ -324,6 +350,7 @@ describe("Plugin integration tests", () => {
 			new Map([
 				["files/anotherFile.md", 1],
 				["files/newFile.md", 2],
+				["files.md", 3],
 			]),
 		);
 
@@ -334,22 +361,43 @@ describe("Plugin integration tests", () => {
 			parent: null,
 		});
 
-		assert.deepEqual(plugin.getFilePathToId(), new Map());
-		assert.strictEqual(deleteFile.mock.callCount(), 1);
-		assert.strictEqual(createFile2.mock.callCount(), 1);
+		assert.deepEqual(plugin.getFilePathToId(), new Map([["files.md", 3]]));
+		assert.equal(plugin.getFileIdToFile().has(3), true);
+		assert.strictEqual(deleteFile.mock.callCount(), 2);
 		assert.strictEqual(createFile.mock.callCount(), 1);
+		assert.strictEqual(createFile2.mock.callCount(), 1);
+		assert.strictEqual(createFile3.mock.callCount(), 1);
 		// one call for create and the second for delete
-		assert.strictEqual(sendMessage.mock.callCount(), 2);
-		assert.deepEqual(sendMessage.mock.calls[1].arguments[0], {
-			type: MessageType.Delete,
-			objectType: "folder",
-			fileId: 1,
-		} as EventMessage);
+		assert.strictEqual(sendMessage.mock.callCount(), 6);
+
+		const expectedMessages = [
+			{ type: 1, fileId: 3, objectType: "file", workspacePath: "files.md" },
+			{
+				type: 1,
+				fileId: 2,
+				objectType: "file",
+				workspacePath: "files/newFile.md",
+			},
+			{
+				type: 1,
+				fileId: 1,
+				objectType: "file",
+				workspacePath: "files/anotherFile.md",
+			},
+			{ type: 2, fileId: 2, objectType: "file", workspacePath: "files" },
+			{ type: 2, fileId: 1, objectType: "file", workspacePath: "files" },
+			{ type: 2, fileId: 0, objectType: "folder", workspacePath: "files" },
+		];
+
+		for (let i = 0; i < sendMessage.mock.calls.length; i++) {
+			const call = sendMessage.mock.calls[i];
+			assert.deepEqual(call.arguments[0], expectedMessages[i], `message ${i}`);
+		}
 	});
 
 	test("should rename a file on 'rename'", async (t) => {
 		const now = new Date().toString();
-		const renameFile = t.mock.method(apiClient, "updateFile", () => { });
+		const renameFile = t.mock.method(apiClient, "updateFile", () => {});
 		const createOldFile = t.mock.method(
 			apiClient,
 			"createFile",
@@ -367,7 +415,7 @@ describe("Plugin integration tests", () => {
 			},
 			{ times: 1 },
 		);
-		const sendMessage = t.mock.method(wsClient, "sendMessage", () => { });
+		const sendMessage = t.mock.method(wsClient, "sendMessage", () => {});
 
 		await plugin.events.create({
 			name: "newFile.md",
@@ -427,6 +475,7 @@ describe("Plugin integration tests", () => {
 			type: MessageType.Rename,
 			objectType: "file",
 			fileId: 1,
+			workspacePath: "files/oldName.md",
 		} as EventMessage);
 	});
 

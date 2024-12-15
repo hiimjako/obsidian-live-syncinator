@@ -8,6 +8,7 @@ import {
 	type EventMessage,
 	type WsClient,
 } from "./ws";
+import path from "path-browserify";
 
 export interface Events {
 	create(file: TAbstractFile): Promise<void>;
@@ -87,7 +88,7 @@ export class RealTimePlugin {
 						);
 					}
 				} else {
-					// in case of only add we can safely add the text to the local verison
+					// in case of only add we can safely add the text to the local version
 					const content = await this.storage.persistChunks(
 						file.workspacePath,
 						diffs,
@@ -122,53 +123,130 @@ export class RealTimePlugin {
 	}
 
 	async onEventMessage(event: EventMessage) {
-		console.log("event", event);
+		console.log("[socket] new event", event);
 
 		// note the maps that keep track of the current files will be updated
 		// in the create and delete events, as creating a file will trigger
 		// this functions
 		if (event.type === MessageType.Create) {
-			const fileApi = await this.apiClient.fetchFile(event.fileId);
-			this.filePathToId.set(fileApi.workspacePath, fileApi.id);
-			this.fileIdToFile.set(fileApi.id, {
-				...fileApi,
-				content: "",
-			});
-			this.storage.writeObject(fileApi.workspacePath, fileApi.content);
-		} else if (event.type === MessageType.Delete) {
-			const file = this.fileIdToFile.get(event.fileId);
-			if (!file) {
-				console.warn(
-					`cannot delete file ${event.fileId} as it is not present in current workspace`,
-				);
-				return;
-			}
-			this.storage.deleteObject(file.workspacePath);
-		} else if (event.type === MessageType.Rename) {
-			const file = this.fileIdToFile.get(event.fileId);
-			if (!file) {
-				console.warn(
-					`cannot delete file ${event.fileId} as it is not present in current workspace`,
-				);
-				return;
-			}
-
-			const fileApi = await this.apiClient.fetchFile(event.fileId);
-			const oldPath = file.workspacePath;
-			this.filePathToId.delete(oldPath);
-			this.filePathToId.set(fileApi.workspacePath, fileApi.id);
-
-			const updatedFile = this.fileIdToFile.get(fileApi.id);
-			if (updatedFile) {
-				updatedFile.workspacePath = fileApi.workspacePath;
-				this.fileIdToFile.set(fileApi.id, updatedFile);
+			if (event.objectType === "file") {
+				const fileApi = await this.apiClient.fetchFile(event.fileId);
+				this.filePathToId.set(fileApi.workspacePath, fileApi.id);
+				this.fileIdToFile.set(fileApi.id, {
+					...fileApi,
+					content: "",
+				});
+				this.storage.writeObject(fileApi.workspacePath, fileApi.content);
+			} else if (event.objectType === "folder") {
+				this.storage.writeObject(event.workspacePath, "", { isDir: true });
 			} else {
-				console.error(`file ${oldPath} to ${fileApi.workspacePath} not found`);
+				console.error("[socket] unknown", event);
 			}
+		} else if (event.type === MessageType.Delete) {
+			if (event.objectType === "file") {
+				const file = this.fileIdToFile.get(event.fileId);
+				if (!file) {
+					console.warn(
+						`[socket] cannot delete file ${event.fileId} as it is not present in current workspace`,
+					);
+					return;
+				}
+				this.storage.deleteObject(file.workspacePath, { force: true });
+			} else if (event.objectType === "folder") {
+				const files = await this.storage.listFiles({
+					prefix: event.workspacePath,
+				});
+				if (files.length > 1) {
+					// FIXME: check if it is only an edge case, given that it should
+					// be the last event in a folder deletion.
+					// The files should be already deleted.
+					console.error("[soket] trying to delete not empty folder");
+					return;
+				}
+				this.storage.deleteObject(event.workspacePath, { force: true });
+			} else {
+				console.error("[socket] unknown", event);
+			}
+		} else if (event.type === MessageType.Rename) {
+			if (event.objectType === "file") {
+				const file = this.fileIdToFile.get(event.fileId);
+				if (!file) {
+					console.warn(
+						`[socket] cannot delete file ${event.fileId} as it is not present in current workspace`,
+					);
+					return;
+				}
 
-			this.storage.rename(oldPath, fileApi.workspacePath);
+				const fileApi = await this.apiClient.fetchFile(event.fileId);
+				const oldPath = file.workspacePath;
+				this.filePathToId.delete(oldPath);
+				this.filePathToId.set(fileApi.workspacePath, fileApi.id);
+
+				const updatedFile = this.fileIdToFile.get(fileApi.id);
+				if (updatedFile) {
+					updatedFile.workspacePath = fileApi.workspacePath;
+					this.fileIdToFile.set(fileApi.id, updatedFile);
+				} else {
+					console.error(
+						`[socket] file ${oldPath} to ${fileApi.workspacePath} not found`,
+					);
+				}
+
+				this.storage.rename(oldPath, fileApi.workspacePath);
+			} else if (event.objectType === "folder") {
+				const workspacePath = event.workspacePath + path.sep;
+				const files = await this.storage.listFiles({
+					prefix: workspacePath,
+				});
+				if (files.length === 0) {
+					console.error("[socket] trying to rename not existing folder");
+					return;
+				}
+
+				for (const file of files) {
+					const fileId = this.filePathToId.get(file.path);
+					if (!fileId) {
+						continue;
+					}
+					const fileDesc = this.fileIdToFile.get(event.fileId);
+					if (!fileDesc) {
+						continue;
+					}
+
+					const fileApi = await this.apiClient.fetchFile(event.fileId);
+					const oldPath = fileDesc.workspacePath;
+					this.filePathToId.delete(oldPath);
+					this.filePathToId.set(fileApi.workspacePath, fileApi.id);
+
+					const updatedFile = this.fileIdToFile.get(fileApi.id);
+					if (updatedFile) {
+						updatedFile.workspacePath = fileApi.workspacePath;
+						this.fileIdToFile.set(fileApi.id, updatedFile);
+					} else {
+						console.error(
+							`[socket] file ${oldPath} to ${fileApi.workspacePath} not found`,
+						);
+					}
+
+					this.storage.rename(oldPath, fileApi.workspacePath);
+				}
+
+				// give time to obsidian to update cache
+				for (let i = 0; i < 10; i++) {
+					const filesPostRename = await this.storage.listFiles({
+						prefix: workspacePath,
+					});
+					if (filesPostRename.length === 0) {
+						this.storage.deleteObject(event.workspacePath);
+						break;
+					}
+					await sleep(100);
+				}
+			} else {
+				console.error("[socket] unknown", event);
+			}
 		} else {
-			console.error(`unknown event ${event}`);
+			console.error(`[socket] unknown event ${event}`);
 		}
 	}
 
@@ -178,6 +256,7 @@ export class RealTimePlugin {
 
 	// FIXME: avoid to trigger again create on ws event
 	private async create(file: TAbstractFile) {
+		console.log("[event]: create", file);
 		if (this.filePathToId.has(file.path)) {
 			return;
 		}
@@ -188,6 +267,7 @@ export class RealTimePlugin {
 				type: MessageType.Create,
 				fileId: 0,
 				objectType: "folder",
+				workspacePath: file.path,
 			};
 			this.wsClient.sendMessage(msg);
 			return;
@@ -205,6 +285,7 @@ export class RealTimePlugin {
 				type: MessageType.Create,
 				fileId: fileApi.id,
 				objectType: "file",
+				workspacePath: fileApi.workspacePath,
 			};
 			this.wsClient.sendMessage(msg);
 		} catch (error) {
@@ -213,6 +294,7 @@ export class RealTimePlugin {
 	}
 
 	private async modify(file: TAbstractFile) {
+		console.log("[event]: modify", file);
 		const fileId = this.filePathToId.get(file.path);
 		if (fileId == null) {
 			console.error(`file '${file.path}' not found`);
@@ -246,46 +328,64 @@ export class RealTimePlugin {
 
 	// FIXME: avoid to trigger again delete on ws event
 	private async delete(file: TAbstractFile) {
-		console.log(file);
+		console.log("[event]: delete", file);
+
+		const deleteFile = async (fileId: number) => {
+			try {
+				await this.apiClient.deleteFile(fileId);
+				this.fileIdToFile.delete(fileId);
+				this.filePathToId.delete(file.path);
+
+				const msg: EventMessage = {
+					type: MessageType.Delete,
+					fileId: fileId,
+					objectType: "file",
+					workspacePath: file.path,
+				};
+				this.wsClient.sendMessage(msg);
+			} catch (error) {
+				console.error(error);
+			}
+		};
+
 		const fileId = this.filePathToId.get(file.path);
 		if (!fileId) {
 			console.error(
-				`missing file for deletion: ${file.path}, probably a folder`,
+				`missing file for deletion: "${file.path}", probably a folder`,
 			);
+
+			for (const [filePath, fileId] of this.filePathToId.entries()) {
+				if (filePath.startsWith(file.path + path.sep)) {
+					this.filePathToId.delete(filePath);
+					this.fileIdToFile.delete(fileId);
+					await deleteFile(fileId);
+				}
+			}
+
 			const msg: EventMessage = {
 				type: MessageType.Delete,
 				fileId: 0,
 				objectType: "folder",
+				workspacePath: file.path,
 			};
 			this.wsClient.sendMessage(msg);
 			return;
 		}
 
-		try {
-			await this.apiClient.deleteFile(fileId);
-			this.fileIdToFile.delete(fileId);
-			this.filePathToId.delete(file.path);
-
-			const msg: EventMessage = {
-				type: MessageType.Delete,
-				fileId: fileId,
-				objectType: "file",
-			};
-			this.wsClient.sendMessage(msg);
-		} catch (error) {
-			console.error(error);
-		}
+		await deleteFile(fileId);
 	}
 
 	// FIXME: avoid to trigger again rename on ws event
 	private async rename(file: TAbstractFile, oldPath: string) {
+		console.log("[event]: rename", oldPath, file);
 		const fileId = this.filePathToId.get(oldPath);
 		if (!fileId) {
-			console.error(`missing file for rename: ${oldPath}, probably a folder`);
+			console.error(`missing file for rename: "${oldPath}", probably a folder`);
 			const msg: EventMessage = {
 				type: MessageType.Rename,
 				fileId: 0,
 				objectType: "folder",
+				workspacePath: oldPath,
 			};
 			this.wsClient.sendMessage(msg);
 			return;
@@ -310,6 +410,7 @@ export class RealTimePlugin {
 				type: MessageType.Rename,
 				fileId: fileId,
 				objectType: "file",
+				workspacePath: oldPath,
 			};
 			this.wsClient.sendMessage(msg);
 		} catch (error) {

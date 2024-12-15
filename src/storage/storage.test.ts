@@ -170,5 +170,12 @@ describe("Disk storage integration tests", () => {
 
 			assert.deepEqual(splitted, ["./foo/", "./foo/bar/", "./foo/bar/baz/"]);
 		});
+
+		test("should handle folder path", async () => {
+			const path = "./foo/bar/";
+			const splitted = new Disk(v).getIncrementalDirectories(path);
+
+			assert.deepEqual(splitted, ["./foo/", "./foo/bar/"]);
+		});
 	});
 });

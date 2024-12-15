@@ -17,6 +17,7 @@ export interface ChunkMessage extends MessageHeader {
 }
 
 export interface EventMessage extends MessageHeader {
+	workspacePath: string;
 	objectType: "file" | "folder";
 }
 
@@ -47,7 +48,6 @@ export class WsClient {
 						event.data.toString(),
 					);
 
-					console.log(msg);
 					switch (msg.type) {
 						case MessageType.Chunk:
 							await chunkMessage(msg as ChunkMessage);
