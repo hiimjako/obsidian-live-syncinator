@@ -4,6 +4,14 @@ It depends and requires [syncinator-server](https://github.com/hiimjako/obsidian
 
 # Why the Name?
 Drawing inspiration from the inventive naming style of Heinz Doofenshmirtz (Phineas and Ferb).
+# Development
+To test this plugin:
+1. Clone the repository
+1. Link the repository inside the `.obisdian/plugins` of your obsidian workspace 
+1. Open/Reopen obsidian 
+1. Enable plugin in the settings
+1. Configure plugin
+
 # TODO
 
 - Add sync for configurations
