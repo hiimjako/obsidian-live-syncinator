@@ -27,7 +27,7 @@ describe("Plugin integration tests", () => {
 		wsClient = new WsClient("localhost");
 
 		// to remove logs on tests
-		test.mock.method(wsClient, "registerOnError", () => {});
+		test.mock.method(wsClient, "registerOnError", () => { });
 
 		plugin = new Syncinator(storage, apiClient, wsClient);
 	});
@@ -156,7 +156,7 @@ describe("Plugin integration tests", () => {
 		assert.strictEqual(fetchFile2.mock.callCount(), 1);
 	});
 
-	test("should create a file on 'create'", async (t) => {
+	test("should create a file on obsidian event 'create'", async (t) => {
 		const now = new Date().toString();
 		const createFile = t.mock.method(apiClient, "createFile", (): File => {
 			return {
@@ -170,7 +170,7 @@ describe("Plugin integration tests", () => {
 				workspaceId: 1,
 			};
 		});
-		const sendMessage = t.mock.method(wsClient, "sendMessage", () => {});
+		const sendMessage = t.mock.method(wsClient, "sendMessage", () => { });
 
 		await plugin.events.create({
 			name: "newFile.md",
@@ -220,8 +220,8 @@ describe("Plugin integration tests", () => {
 		} as EventMessage);
 	});
 
-	test("should delete a file on 'delete'", async (t) => {
-		const deleteFile = t.mock.method(apiClient, "deleteFile", () => {});
+	test("should delete a file on obsidian event 'delete'", async (t) => {
+		const deleteFile = t.mock.method(apiClient, "deleteFile", () => { });
 		const createFile = t.mock.method(apiClient, "createFile", (): File => {
 			return {
 				id: 1,
@@ -234,7 +234,7 @@ describe("Plugin integration tests", () => {
 				workspaceId: 1,
 			};
 		});
-		const sendMessage = t.mock.method(wsClient, "sendMessage", () => {});
+		const sendMessage = t.mock.method(wsClient, "sendMessage", () => { });
 
 		await plugin.events.create({
 			name: "newFile.md",
@@ -268,8 +268,8 @@ describe("Plugin integration tests", () => {
 		} as EventMessage);
 	});
 
-	test("should delete a folder on 'delete'", async (t) => {
-		const deleteFile = t.mock.method(apiClient, "deleteFile", () => {});
+	test("should delete a folder on obsidian event 'delete'", async (t) => {
+		const deleteFile = t.mock.method(apiClient, "deleteFile", () => { });
 		const createFile = t.mock.method(
 			apiClient,
 			"createFile",
@@ -322,7 +322,7 @@ describe("Plugin integration tests", () => {
 			{ times: 1 },
 		);
 
-		const sendMessage = t.mock.method(wsClient, "sendMessage", () => {});
+		const sendMessage = t.mock.method(wsClient, "sendMessage", () => { });
 
 		await plugin.events.create({
 			name: "files.md",
@@ -395,9 +395,9 @@ describe("Plugin integration tests", () => {
 		}
 	});
 
-	test("should rename a file on 'rename'", async (t) => {
+	test("should rename a file on obsidian event 'rename'", async (t) => {
 		const now = new Date().toString();
-		const renameFile = t.mock.method(apiClient, "updateFile", () => {});
+		const renameFile = t.mock.method(apiClient, "updateFile", () => { });
 		const createOldFile = t.mock.method(
 			apiClient,
 			"createFile",
@@ -415,7 +415,7 @@ describe("Plugin integration tests", () => {
 			},
 			{ times: 1 },
 		);
-		const sendMessage = t.mock.method(wsClient, "sendMessage", () => {});
+		const sendMessage = t.mock.method(wsClient, "sendMessage", () => { });
 
 		await plugin.events.create({
 			name: "newFile.md",
@@ -476,6 +476,109 @@ describe("Plugin integration tests", () => {
 			objectType: "file",
 			fileId: 1,
 			workspacePath: "files/oldName.md",
+		} as EventMessage);
+	});
+
+	test("should rename a folder on obsidian event 'rename'", async (t) => {
+		const now = new Date().toString();
+		const createOldFile = t.mock.method(
+			apiClient,
+			"createFile",
+			(): File => {
+				return {
+					id: 1,
+					workspacePath: "oldFolder/file.md",
+					diskPath: "",
+					hash: "",
+					createdAt: now,
+					updatedAt: now,
+					mimeType: "",
+					workspaceId: 1,
+				};
+			},
+			{ times: 1 },
+		);
+		const renameFile = t.mock.method(
+			apiClient,
+			"updateFile",
+			(): File => {
+				return {
+					id: 1,
+					workspacePath: "newFolder/file.md",
+					diskPath: "",
+					hash: "",
+					createdAt: now,
+					updatedAt: now,
+					mimeType: "",
+					workspaceId: 1,
+				};
+			},
+			{ times: 1 },
+		);
+
+		const sendMessage = t.mock.method(wsClient, "sendMessage", () => { });
+
+		await plugin.events.create({
+			name: "file.md",
+			path: "oldFolder/file.md",
+			vault,
+			parent: null,
+		});
+		await storage.writeObject("oldFolder/file.md", "lorem ipsum");
+
+		assert.deepEqual(
+			plugin.getFilePathToId(),
+			new Map([["oldFolder/file.md", 1]]),
+		);
+
+		await plugin.events.rename(
+			{
+				name: "newFolder",
+				path: "newFolder",
+				vault,
+				parent: null,
+			},
+			"oldFolder",
+		);
+
+		assert.deepEqual(
+			plugin.getFilePathToId(),
+			new Map([["newFolder/file.md", 1]]),
+		);
+		assert.deepEqual(
+			plugin.getFileIdToFile(),
+			new Map([
+				[
+					1,
+					{
+						content: "",
+						createdAt: now,
+						diskPath: "",
+						hash: "",
+						id: 1,
+						mimeType: "",
+						updatedAt: now,
+						workspaceId: 1,
+						workspacePath: "newFolder/file.md",
+					},
+				],
+			]),
+		);
+		assert.strictEqual(renameFile.mock.callCount(), 1);
+		assert.deepEqual(renameFile.mock.calls[0].arguments, [
+			1,
+			"newFolder/file.md",
+		]);
+
+		assert.strictEqual(createOldFile.mock.callCount(), 1);
+		assert.strictEqual(renameFile.mock.callCount(), 1);
+		assert.strictEqual(sendMessage.mock.callCount(), 2);
+		// ignore the first for creation
+		assert.deepEqual(sendMessage.mock.calls[1].arguments[0], {
+			type: MessageType.Rename,
+			objectType: "folder",
+			fileId: 0,
+			workspacePath: "oldFolder",
 		} as EventMessage);
 	});
 

@@ -10,6 +10,8 @@ import {
 } from "./ws";
 import path from "path-browserify";
 
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
 export interface Events {
 	create(file: TAbstractFile): Promise<void>;
 	modify(file: TAbstractFile): Promise<void>;
@@ -208,12 +210,12 @@ export class Syncinator {
 					if (!fileId) {
 						continue;
 					}
-					const fileDesc = this.fileIdToFile.get(event.fileId);
+					const fileDesc = this.fileIdToFile.get(fileId);
 					if (!fileDesc) {
 						continue;
 					}
 
-					const fileApi = await this.apiClient.fetchFile(event.fileId);
+					const fileApi = await this.apiClient.fetchFile(fileId);
 					const oldPath = fileDesc.workspacePath;
 					this.filePathToId.delete(oldPath);
 					this.filePathToId.set(fileApi.workspacePath, fileApi.id);
@@ -381,6 +383,64 @@ export class Syncinator {
 		const fileId = this.filePathToId.get(oldPath);
 		if (!fileId) {
 			console.error(`missing file for rename: "${oldPath}", probably a folder`);
+
+			const oldWorkspacePath = oldPath + path.sep;
+			const folderFiles = await this.storage.listFiles({
+				prefix: oldWorkspacePath,
+			});
+			if (folderFiles.length === 0) {
+				console.error("[socket] trying to rename not existing folder");
+				return;
+			}
+
+			for (const folderFile of folderFiles) {
+				const fileId = this.filePathToId.get(folderFile.path);
+				if (!fileId) {
+					continue;
+				}
+				const fileDesc = this.fileIdToFile.get(fileId);
+				if (!fileDesc) {
+					continue;
+				}
+
+				const oldFilePath = fileDesc.workspacePath;
+				// FIXME: to validate, if it is always safe
+				const newFilePath = oldFilePath.replace(oldPath, file.path);
+
+				try {
+					await this.apiClient.updateFile(fileId, newFilePath);
+				} catch (error) {
+					console.error(error);
+				}
+
+				this.filePathToId.delete(oldFilePath);
+				this.filePathToId.set(newFilePath, fileId);
+
+				const updatedFile = this.fileIdToFile.get(fileId);
+				if (updatedFile) {
+					updatedFile.workspacePath = newFilePath;
+					this.fileIdToFile.set(fileId, updatedFile);
+				} else {
+					console.error(
+						`[socket] file ${oldFilePath} to ${newFilePath} not found`,
+					);
+				}
+
+				this.storage.rename(oldFilePath, newFilePath);
+			}
+
+			// give time to obsidian to update cache
+			for (let i = 0; i < 10; i++) {
+				const filesPostRename = await this.storage.listFiles({
+					prefix: oldWorkspacePath,
+				});
+				if (filesPostRename.length === 0) {
+					this.storage.deleteObject(oldPath, { force: true });
+					break;
+				}
+				await sleep(100);
+			}
+
 			const msg: EventMessage = {
 				type: MessageType.Rename,
 				fileId: 0,
@@ -388,6 +448,7 @@ export class Syncinator {
 				workspacePath: oldPath,
 			};
 			this.wsClient.sendMessage(msg);
+
 			return;
 		}
 

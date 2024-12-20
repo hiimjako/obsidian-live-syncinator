@@ -48,7 +48,10 @@ export function CreateVaultMock(basepath: string): Vault {
 				}
 			},
 			rename(normalizedPath, normalizedNewPath) {
-				fs.rename(normalizedPath, normalizedNewPath);
+				const oldVaultPath = fullPath(normalizedPath);
+				const vaultPath = fullPath(normalizedNewPath);
+
+				fs.rename(oldVaultPath, vaultPath);
 			},
 		},
 		async createFolder(normalizedPath): Promise<TFolder> {
@@ -176,7 +179,7 @@ export function CreateVaultMock(basepath: string): Vault {
 		},
 		async delete(file, force) {
 			const vaultPath = fullPath(file.path);
-			await fs.rm(vaultPath, { force: force });
+			await fs.rm(vaultPath, { force: force, recursive: true });
 		},
 	} as Vault;
 
