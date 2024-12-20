@@ -23,19 +23,14 @@ export default class Syncinator extends Plugin {
 	constructor(app: App, manifest: PluginManifest) {
 		super(app, manifest);
 		this.statusBar = this.addStatusBarItem();
-
-		const httpClient = new HttpClient(
-			this.settings.https ? "https" : "http",
-			this.settings.domain,
-			{},
-		);
-		this.apiClient = new ApiClient(httpClient);
-		this.wsClient = new WsClient(this.settings.domain);
-		this.storage = new Disk(this.app.vault);
 	}
 
 	async registerEvents() {
-		const plugin = new SyncinatorPlugin(this.storage, this.apiClient, this.wsClient);
+		const plugin = new SyncinatorPlugin(
+			this.storage,
+			this.apiClient,
+			this.wsClient,
+		);
 
 		await plugin.init();
 
@@ -62,6 +57,15 @@ export default class Syncinator extends Plugin {
 		this.addSettingTab(new SettingTab(this.app, this));
 
 		// Init
+		const httpClient = new HttpClient(
+			this.settings.https ? "https" : "http",
+			this.settings.domain,
+			{},
+		);
+		this.apiClient = new ApiClient(httpClient);
+		this.wsClient = new WsClient(this.settings.domain);
+		this.storage = new Disk(this.app.vault);
+
 		this.refreshToken();
 		this.registerInterval(
 			window.setInterval(async () => await this.refreshToken(), 5 * 60 * 1000),
