@@ -42,7 +42,7 @@ export class SettingTab extends PluginSettingTab {
 			);
 
 		new Setting(containerEl).setName("HTTPS").addToggle((toggle) =>
-			toggle.onChange((value) => {
+			toggle.setValue(this.plugin.settings.https).onChange((value) => {
 				this.plugin.settings.https = value;
 			}),
 		);
@@ -73,6 +73,7 @@ export class SettingTab extends PluginSettingTab {
 				.setButtonText("save")
 				.setWarning()
 				.onClick(async () => {
+					console.log(this.plugin.settings);
 					await this.plugin.saveSettings();
 				}),
 		);
