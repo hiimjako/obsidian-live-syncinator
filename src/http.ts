@@ -1,3 +1,5 @@
+import { constrainedMemory } from "process";
+
 enum HttpMethod {
 	GET = "GET",
 	POST = "POST",
@@ -8,6 +10,7 @@ enum HttpMethod {
 type FetchResponse<T> = {
 	data: T;
 	status: number;
+	headers: Headers;
 };
 
 export class HttpClient {
@@ -21,7 +24,7 @@ export class HttpClient {
 	) {
 		this.basePath = `${scheme}://${domain}`;
 		this.defaultHeaders = {
-			"Content-Type": "application/json",
+			// "Content-Type": "application/json",
 			...defaultHeaders,
 		};
 	}
@@ -31,6 +34,21 @@ export class HttpClient {
 		options: RequestInit = {},
 	): Promise<FetchResponse<T>> {
 		const url = new URL(endpoint, this.basePath).toString();
+
+		if (options.method === HttpMethod.POST) {
+			const reqContentType =
+				this.defaultHeaders["Content-Type"] ??
+				((options.headers ?? {}) as Record<string, string>)["Content-Type"] ??
+				"";
+
+			if (
+				reqContentType.includes("application/json") ||
+				reqContentType === ""
+			) {
+				options.body = JSON.stringify(options.body);
+			}
+		}
+
 		const response = await fetch(url, {
 			...options,
 			headers: {
@@ -45,6 +63,8 @@ export class HttpClient {
 		const contentType = response.headers.get("Content-Type");
 		if (response.ok && contentType?.includes("application/json")) {
 			data = await response.json();
+		} else if (response.ok && contentType?.includes("multipart/mixed")) {
+			data = await response.arrayBuffer();
 		} else {
 			data = await response.text();
 		}
@@ -53,7 +73,7 @@ export class HttpClient {
 			throw new Error(`Error: ${status} - ${data} `);
 		}
 
-		return { data: data as T, status };
+		return { data: data as T, status, headers: response.headers };
 	}
 
 	public setAuthorizationHeader(token: string) {
@@ -69,13 +89,13 @@ export class HttpClient {
 
 	public post<T>(
 		endpoint: string,
-		body: object,
+		body: object | string,
 		headers: Record<string, string> = {},
 	): Promise<FetchResponse<T>> {
 		return this.request<T>(endpoint, {
 			method: HttpMethod.POST,
 			headers,
-			body: JSON.stringify(body),
+			body: body as BodyInit,
 		});
 	}
 
@@ -87,7 +107,7 @@ export class HttpClient {
 		return this.request<T>(endpoint, {
 			method: HttpMethod.PATCH,
 			headers,
-			body: JSON.stringify(body),
+			body: body as BodyInit,
 		});
 	}
 
