@@ -1,6 +1,5 @@
-import { kMaxLength } from "node:buffer";
 import { promises as fs, readdirSync, statSync } from "node:fs";
-import path, { basename } from "node:path";
+import path from "node:path";
 import type { TFolder, Vault, DataWriteOptions, Stat, TFile } from "obsidian";
 
 export function CreateVaultMock(basepath: string): Vault {
@@ -79,7 +78,7 @@ export function CreateVaultMock(basepath: string): Vault {
 			const vaultPath = basepath;
 			const filenames: TFile[] = [];
 
-			let subGetFiles: (basepath: string, subPath: string) => void = () => {};
+			let subGetFiles: (basepath: string, subPath: string) => void = () => { };
 			subGetFiles = (basepath: string, subPath: string) => {
 				const items = readdirSync(path.join(basepath, subPath));
 
@@ -114,7 +113,7 @@ export function CreateVaultMock(basepath: string): Vault {
 		getMarkdownFiles() {
 			const filenames: TFile[] = [];
 
-			let subGetFiles: (basepath: string, subPath: string) => void = () => {};
+			let subGetFiles: (basepath: string, subPath: string) => void = () => { };
 			subGetFiles = (basepath: string, subPath: string) => {
 				const items = readdirSync(path.join(basepath, subPath));
 
@@ -176,6 +175,38 @@ export function CreateVaultMock(basepath: string): Vault {
 			const vaultPath = fullPath(file.path);
 			const data = await fs.readFile(vaultPath, "utf8");
 			return data;
+		},
+		async readBinary(file) {
+			const vaultPath = fullPath(file.path);
+			const buffer = await fs.readFile(vaultPath);
+			return buffer.buffer.slice(
+				buffer.byteOffset,
+				buffer.byteOffset + buffer.byteLength,
+			);
+		},
+		async createBinary(normalizedPath, data, options) {
+			if (!(data instanceof ArrayBuffer || ArrayBuffer.isView(data))) {
+				throw new Error("Data must be an ArrayBuffer or a TypedArray.");
+			}
+
+			const buffer = Buffer.isBuffer(data) ? data : Buffer.from(data);
+
+			const vaultPath = fullPath(normalizedPath);
+
+			await fs.writeFile(vaultPath, buffer);
+			return {
+				vault: v,
+				name: path.basename(vaultPath, path.extname(vaultPath)),
+				extension: path.extname(vaultPath),
+				path: vaultPath,
+				parent: null,
+				basename: path.basename(vaultPath),
+				stat: {
+					size: 1,
+					ctime: new Date().getTime(),
+					mtime: new Date().getTime(),
+				},
+			};
 		},
 		async delete(file, force) {
 			const vaultPath = fullPath(file.path);

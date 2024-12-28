@@ -171,8 +171,9 @@ describe("Plugin integration tests", () => {
 			};
 		});
 		const sendMessage = t.mock.method(wsClient, "sendMessage", () => { });
+		await storage.writeObject("files/newFile.md", "test")
 
-		await plugin.events.create({
+		 await plugin.events.create({
 			name: "newFile.md",
 			path: "files/newFile.md",
 			vault,
@@ -235,6 +236,7 @@ describe("Plugin integration tests", () => {
 			};
 		});
 		const sendMessage = t.mock.method(wsClient, "sendMessage", () => { });
+		await storage.writeObject("files/newFile.md", "test")
 
 		await plugin.events.create({
 			name: "newFile.md",
@@ -323,6 +325,10 @@ describe("Plugin integration tests", () => {
 		);
 
 		const sendMessage = t.mock.method(wsClient, "sendMessage", () => { });
+		
+		await storage.writeObject("files.md", "test")
+		await storage.writeObject("files/newFile.md", "test")
+		await storage.writeObject("files/anotherFile.md", "test")
 
 		await plugin.events.create({
 			name: "files.md",
@@ -416,6 +422,7 @@ describe("Plugin integration tests", () => {
 			{ times: 1 },
 		);
 		const sendMessage = t.mock.method(wsClient, "sendMessage", () => { });
+		await storage.writeObject("files/oldName.md", "test")
 
 		await plugin.events.create({
 			name: "newFile.md",
@@ -517,6 +524,7 @@ describe("Plugin integration tests", () => {
 		);
 
 		const sendMessage = t.mock.method(wsClient, "sendMessage", () => { });
+		await storage.writeObject("oldFolder/file.md", "test")
 
 		await plugin.events.create({
 			name: "file.md",
@@ -524,7 +532,6 @@ describe("Plugin integration tests", () => {
 			vault,
 			parent: null,
 		});
-		await storage.writeObject("oldFolder/file.md", "lorem ipsum");
 
 		assert.deepEqual(
 			plugin.getFilePathToId(),

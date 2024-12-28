@@ -15,7 +15,7 @@ export declare interface File {
 }
 
 export declare interface FileWithContent extends File {
-	content: string;
+	content: string | ArrayBuffer;
 }
 
 declare interface CreateFile {
@@ -77,19 +77,19 @@ export class ApiClient {
 		// Extract and parse the metadata
 		const metadata: File = JSON.parse(metadataPart.value);
 
-		// Extract the file content (as a Blob)
-		const fileBlob = new Blob([filePart.value], { type: metadata.mimeType });
-
 		// TODO: optimize this using streams
 		const fileWithContent: FileWithContent = {
 			...metadata,
-			content: await fileBlob.text(),
+			content: filePart.value,
 		};
 
 		return fileWithContent;
 	}
 
-	async createFile(filepath: string, content: string): Promise<File> {
+	async createFile(
+		filepath: string,
+		content: string | ArrayBuffer,
+	): Promise<File> {
 		const multipart = new Multipart()
 			.createFormFile("file", path.basename(filepath), content)
 			.createFormField("path", filepath);

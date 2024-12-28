@@ -9,6 +9,7 @@ import {
 	type WsClient,
 } from "./ws";
 import path from "path-browserify";
+import { isTextFile } from "./utils/mime";
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -67,35 +68,41 @@ export class Syncinator {
 					fileWithContent.content,
 				);
 			} else {
-				const currentContent = await this.storage.readObject(
-					file.workspacePath,
-				);
-				const diffs = computeDiff(currentContent, fileWithContent.content);
+				if (typeof fileWithContent.content === "string") {
+					const currentContent = await this.storage.readObject(
+						file.workspacePath,
+					);
+					const diffs = computeDiff(currentContent, fileWithContent.content);
 
-				if (diffs.some((diff) => diff.type === Operation.DiffRemove)) {
-					// FIXME: in case we have deletion we should handle it, maybe asking to the
-					// user?
-					// For now we just let win the most recent version
-					const stat = await this.storage.stat(file.workspacePath);
-					const localFileMtime = new Date(stat?.mtime ?? 0);
-					const remoteFileMtime = new Date(fileWithContent.updatedAt);
+					if (diffs.some((diff) => diff.type === Operation.DiffRemove)) {
+						// FIXME: in case we have deletion we should handle it, maybe asking to the
+						// user?
+						// For now we just let win the most recent version
+						const stat = await this.storage.stat(file.workspacePath);
+						const localFileMtime = new Date(stat?.mtime ?? 0);
+						const remoteFileMtime = new Date(fileWithContent.updatedAt);
 
-					console.log(remoteFileMtime, localFileMtime);
+						console.log(remoteFileMtime, localFileMtime);
 
-					if (remoteFileMtime >= localFileMtime) {
-						await this.storage.writeObject(
+						if (remoteFileMtime >= localFileMtime) {
+							await this.storage.writeObject(
+								file.workspacePath,
+								fileWithContent.content,
+								{ force: true },
+							);
+						}
+					} else {
+						// in case of only add we can safely add the text to the local version
+						const content = await this.storage.persistChunks(
 							file.workspacePath,
-							fileWithContent.content,
-							{ force: true },
+							diffs,
 						);
+						fileWithContent.content = content;
 					}
 				} else {
-					// in case of only add we can safely add the text to the local version
-					const content = await this.storage.persistChunks(
-						file.workspacePath,
-						diffs,
+					console.log(
+						`file ${fileWithContent.workspacePath} is not a text file`,
 					);
-					fileWithContent.content = content;
 				}
 			}
 
@@ -276,7 +283,11 @@ export class Syncinator {
 		}
 
 		try {
-			const fileApi = await this.apiClient.createFile(file.path, "");
+			const currentContent = await this.storage.readBinary(file.path);
+			const fileApi = await this.apiClient.createFile(
+				file.path,
+				currentContent,
+			);
 			this.filePathToId.set(fileApi.workspacePath, fileApi.id);
 			this.fileIdToFile.set(fileApi.id, {
 				...fileApi,
@@ -306,6 +317,13 @@ export class Syncinator {
 		const currentFile = this.fileIdToFile.get(fileId);
 		if (currentFile == null) {
 			console.error(`file '${file.path}' not found`);
+			return;
+		}
+
+		if (
+			!isTextFile(currentFile.mimeType) ||
+			typeof currentFile.content !== "string"
+		) {
 			return;
 		}
 

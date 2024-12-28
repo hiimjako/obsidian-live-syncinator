@@ -1,4 +1,5 @@
 import { arrayBufferToBase64, base64ToArrayBuffer } from "./base64Utils";
+import { isTextFile } from "./utils/mime";
 
 type FormField = {
 	name: string;
@@ -182,7 +183,7 @@ export class Multipart {
 				continue;
 			}
 
-			if (part.contentType.startsWith("text/") || typeof part.value === "string") {
+			if (part.filename === "") {
 				this.fileds.push({
 					name: part.name,
 					value: part.value as string,

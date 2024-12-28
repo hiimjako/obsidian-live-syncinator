@@ -40,7 +40,7 @@ export class Disk {
 	// throw an error. Use `force: true` to overwrite the file.
 	async writeObject(
 		vaultPath: string,
-		content: string,
+		content: string | ArrayBuffer,
 		opts: WriteOptions = { force: false, isDir: false },
 	): Promise<void> {
 		const { force, isDir } = opts;
@@ -61,7 +61,11 @@ export class Disk {
 		if (isDir) {
 			await this.vault.createFolder(vaultPath);
 		} else {
-			await this.vault.adapter.write(vaultPath, content);
+			if (content instanceof ArrayBuffer) {
+				await this.vault.createBinary(vaultPath, content);
+			} else {
+				await this.vault.adapter.write(vaultPath, content);
+			}
 		}
 	}
 
@@ -106,6 +110,17 @@ export class Disk {
 		}
 
 		const v = await this.vault.cachedRead(file);
+		return v;
+	}
+
+	async readBinary(vaultPath: string): Promise<ArrayBuffer> {
+		const file = this.vault.getFileByPath(vaultPath);
+
+		if (file == null) {
+			throw new Error(`file '${vaultPath}' doesn't exists`);
+		}
+
+		const v = await this.vault.readBinary(file);
 		return v;
 	}
 
