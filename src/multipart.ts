@@ -30,7 +30,6 @@ export class Multipart {
 		return this._fields;
 	}
 
-
 	createFormFile(
 		fieldname: string,
 		filename: string,
@@ -68,7 +67,7 @@ export class Multipart {
 			const field = this._fields[i];
 			body += `--${this._boundary}\r\n`;
 			body += `Content-Disposition: form-data; name="${field.name}"\r\n\r\n`;
-			body += `${field.value}\r\n`;
+			body += `${field.value}`;
 		}
 
 		body += `\r\n--${this._boundary}--\r\n`;
@@ -94,8 +93,9 @@ export class Multipart {
 	}
 
 	parseParts(contentType: string, encoded: AllowSharedBufferSource): Multipart {
-		const isMultipart = contentType?.startsWith("multipart/mixed") ||
-			contentType?.startsWith("multipart/form-data")
+		const isMultipart =
+			contentType?.startsWith("multipart/mixed") ||
+			contentType?.startsWith("multipart/form-data");
 		if (!isMultipart) {
 			throw new Error("Unexpected Content-Type, expected multipart/mixed");
 		}
@@ -116,7 +116,9 @@ export class Multipart {
 		for (let i = 0; i < rawParts.length; i++) {
 			const rawPart = rawParts[i];
 
-			if (rawPart.length === 0) { continue }
+			if (rawPart.length === 0) {
+				continue;
+			}
 
 			const components = rawPart.split("\r\n");
 
@@ -148,28 +150,30 @@ export class Multipart {
 				const component = components[j];
 
 				if (component.length !== 0) {
-					part.value = component;
-					break
+					part.value = component.trim();
+					break;
 				}
 			}
 
 			// invalid part
-			if (part.name === "") { continue }
+			if (part.name === "") {
+				continue;
+			}
 
 			if (part.contentType === "application/octet-stream") {
 				this.files.push({
 					name: part.name,
 					value: part.value,
 					filename: part.filename,
-				})
+				});
 			} else {
 				this.fileds.push({
 					name: part.name,
 					value: part.value,
-				})
+				});
 			}
 		}
 
-		return this
+		return this;
 	}
 }

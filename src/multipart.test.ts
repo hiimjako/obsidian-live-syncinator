@@ -21,7 +21,6 @@ content--${multipart.boundary}\r
 Content-Disposition: form-data; name="field"\r
 \r
 foo\r
-\r
 --${multipart.boundary}--\r\n`,
 		);
 
@@ -41,7 +40,6 @@ content--${boundary}\r
 Content-Disposition: form-data; name="field"\r
 \r
 foo\r
-\r
 --${boundary}--\r\n`;
 
 		const encoder = new TextEncoder();
