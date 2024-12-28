@@ -24,7 +24,7 @@ export class HttpClient {
 	) {
 		this.basePath = `${scheme}://${domain}`;
 		this.defaultHeaders = {
-			// "Content-Type": "application/json",
+			"Content-Type": "application/json",
 			...defaultHeaders,
 		};
 	}
@@ -35,12 +35,13 @@ export class HttpClient {
 	): Promise<FetchResponse<T>> {
 		const url = new URL(endpoint, this.basePath).toString();
 
-		if (options.method === HttpMethod.POST) {
+		if (options.method !== HttpMethod.GET) {
 			const reqContentType =
-				this.defaultHeaders["Content-Type"] ??
-				((options.headers ?? {}) as Record<string, string>)["Content-Type"] ??
+				((options.headers ?? {}) as Record<string, string>)["Content-Type"] ||
+				this.defaultHeaders["Content-Type"] ||
 				"";
 
+			console.log(reqContentType);
 			if (
 				reqContentType.includes("application/json") ||
 				reqContentType === ""
