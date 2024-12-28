@@ -1,3 +1,5 @@
+import { arrayBufferToBase64, base64ToArrayBuffer } from "./base64Utils";
+
 type FormField = {
 	name: string;
 	value: string;
@@ -6,7 +8,7 @@ type FormField = {
 type FormFile = {
 	name: string;
 	filename: string;
-	value: string;
+	value: string | ArrayBuffer;
 };
 
 export class Multipart {
@@ -33,12 +35,18 @@ export class Multipart {
 	createFormFile(
 		fieldname: string,
 		filename: string,
-		value: string,
+		value: string | ArrayBuffer,
 	): Multipart {
+		let stringValue: string
+		if (value instanceof ArrayBuffer) {
+			stringValue = arrayBufferToBase64(value)
+		} else {
+			stringValue = value
+		}
 		this._files.push({
 			name: fieldname,
 			filename,
-			value,
+			value: stringValue,
 		});
 
 		return this;
@@ -55,19 +63,24 @@ export class Multipart {
 	build(): string {
 		let body = "";
 
-		for (let i = 0; i < this._files.length; i++) {
-			const file = this._files[i];
-			body += `--${this._boundary}\r\n`;
-			body += `Content-Disposition: form-data; name="${file.name}"; filename="${file.filename}"\r\n`;
-			body += "Content-Type: application/octet-stream\r\n\r\n";
-			body += file.value;
-		}
-
 		for (let i = 0; i < this._fields.length; i++) {
 			const field = this._fields[i];
 			body += `--${this._boundary}\r\n`;
 			body += `Content-Disposition: form-data; name="${field.name}"\r\n\r\n`;
 			body += `${field.value}`;
+		}
+
+		if (this._files.length > 0) {
+			body += "\r\n"
+		}
+
+		for (let i = 0; i < this._files.length; i++) {
+			const file = this._files[i];
+			body += `--${this._boundary}\r\n`;
+			body += `Content-Disposition: form-data; name="${file.name}"; filename="${file.filename}"\r\n`;
+			body += "Content-Type: application/octet-stream\r\n";
+			body += "Content-Transfer-Encoding: base64\r\n\r\n";
+			body += file.value;
 		}
 
 		body += `\r\n--${this._boundary}--\r\n`;
@@ -123,10 +136,11 @@ export class Multipart {
 			const components = rawPart.split("\r\n");
 
 			const part = {
-				value: "",
+				value: "" as string | ArrayBuffer,
 				name: "",
 				contentType: "",
 				filename: "",
+				isBase64: false,
 			};
 			// parsing headers
 			for (let j = 0; j < components.length; j++) {
@@ -143,6 +157,10 @@ export class Multipart {
 					part.name = nameMatch ? nameMatch[1].trim() : "";
 					part.filename = filenameMatch ? filenameMatch[1].trim() : "";
 				}
+
+				if (component.startsWith("Content-Transfer-Encoding:")) {
+					part.isBase64 = component.substring("Content-Transfer-Encoding:".length).trim() === "base64";
+				}
 			}
 
 			// parsing value
@@ -150,7 +168,11 @@ export class Multipart {
 				const component = components[j];
 
 				if (component.length !== 0) {
-					part.value = component.trim();
+					if (part.isBase64) {
+						part.value = base64ToArrayBuffer(component.trim())
+					} else {
+						part.value = component.trim();
+					}
 					break;
 				}
 			}
@@ -160,16 +182,16 @@ export class Multipart {
 				continue;
 			}
 
-			if (part.contentType === "application/octet-stream") {
+			if (part.contentType.startsWith("text/") || typeof part.value === "string") {
+				this.fileds.push({
+					name: part.name,
+					value: part.value as string,
+				});
+			} else {
 				this.files.push({
 					name: part.name,
 					value: part.value,
 					filename: part.filename,
-				});
-			} else {
-				this.fileds.push({
-					name: part.name,
-					value: part.value,
 				});
 			}
 		}
