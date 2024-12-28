@@ -143,12 +143,15 @@ export class Multipart {
 				filename: "",
 				isBase64: false,
 			};
+
+			let lastIndexProcessed = 0
 			// parsing headers
 			for (let j = 0; j < components.length; j++) {
 				const component = components[j];
 
 				if (component.startsWith("Content-Type:")) {
 					part.contentType = component.substring("Content-Type:".length).trim();
+					lastIndexProcessed = j
 				}
 
 				if (component.startsWith("Content-Disposition:")) {
@@ -157,15 +160,17 @@ export class Multipart {
 
 					part.name = nameMatch ? nameMatch[1].trim() : "";
 					part.filename = filenameMatch ? filenameMatch[1].trim() : "";
+					lastIndexProcessed = j
 				}
 
 				if (component.startsWith("Content-Transfer-Encoding:")) {
 					part.isBase64 = component.substring("Content-Transfer-Encoding:".length).trim() === "base64";
+					lastIndexProcessed = j
 				}
 			}
 
 			// parsing value
-			for (let j = components.length - 1; j >= 0; j--) {
+			for (let j = components.length - 1; j > lastIndexProcessed; j--) {
 				const component = components[j];
 
 				if (component.length !== 0) {
