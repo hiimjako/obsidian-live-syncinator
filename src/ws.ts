@@ -25,8 +25,8 @@ export interface EventMessage extends MessageHeader {
 export class WsClient {
 	private ws: WebSocket;
 
-	constructor(domain: string) {
-		this.ws = new WebSocket(`ws://${domain}/v1/sync`);
+	constructor(scheme: "ws" | "wss", domain: string) {
+		this.ws = new WebSocket(`${scheme}://${domain}/v1/sync`);
 	}
 
 	registerOnClose(fn: (_: CloseEvent) => Promise<void>) {

@@ -58,12 +58,15 @@ export default class Syncinator extends Plugin {
 
 		// Init
 		const httpClient = new HttpClient(
-			this.settings.https ? "https" : "http",
+			this.settings.useTLS ? "https" : "http",
 			this.settings.domain,
 			{},
 		);
 		this.apiClient = new ApiClient(httpClient);
-		this.wsClient = new WsClient(this.settings.domain);
+		this.wsClient = new WsClient(
+			this.settings.useTLS ? "wss" : "ws",
+			this.settings.domain,
+		);
 		this.storage = new Disk(this.app.vault);
 
 		this.refreshToken();

@@ -4,14 +4,14 @@ import type Syncinator from "../main";
 
 export interface PluginSettings {
 	domain: string;
-	https: boolean;
+	useTLS: boolean;
 	workspaceName: string;
 	workspacePass: string;
 }
 
 export const DEFAULT_SETTINGS: PluginSettings = {
 	domain: "127.0.0.1:8080",
-	https: false,
+	useTLS: false,
 	workspaceName: "",
 	workspacePass: "",
 };
@@ -41,9 +41,9 @@ export class SettingTab extends PluginSettingTab {
 					}),
 			);
 
-		new Setting(containerEl).setName("HTTPS").addToggle((toggle) =>
-			toggle.setValue(this.plugin.settings.https).onChange((value) => {
-				this.plugin.settings.https = value;
+		new Setting(containerEl).setName("Use TLS").addToggle((toggle) =>
+			toggle.setValue(this.plugin.settings.useTLS).onChange((value) => {
+				this.plugin.settings.useTLS = value;
 			}),
 		);
 
