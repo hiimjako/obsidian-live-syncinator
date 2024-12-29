@@ -1,5 +1,5 @@
-# Obsidian Live Syncinator
-The Obsidian-Live-Syncinator is a plugin for Obsidian that keeps your workspace in synchronization across multiple devices, live and in real-time that aims to eventually consistency. 
+# Obsidian Syncinator
+The Obsidian-Syncinator is a plugin for Obsidian that keeps your workspace in synchronization across multiple devices, live and in real-time that aims to eventually consistency. 
 It depends and requires [syncinator-server](https://github.com/hiimjako/obsidian-live-syncinator-server) to be deployed. Follow the documentation to set it up.
 
 # Why the Name?
