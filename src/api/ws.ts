@@ -1,4 +1,4 @@
-import type { DiffChunk } from "./diff";
+import type { DiffChunk } from "../diff";
 
 export enum MessageType {
 	Chunk = 0,

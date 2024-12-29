@@ -3,9 +3,9 @@ import { Syncinator } from "./plugin";
 import { Disk } from "./storage/storage";
 import { CreateVaultMock } from "./storage/storage.mock";
 import fs from "node:fs/promises";
-import { ApiClient, type FileWithContent, type File } from "./api";
-import { HttpClient } from "./http";
-import { type EventMessage, MessageType, WsClient } from "./ws";
+import { ApiClient, type FileWithContent, type File } from "./api/api";
+import { HttpClient } from "./api/http";
+import { type EventMessage, MessageType, WsClient } from "./api/ws";
 import type { Vault } from "obsidian";
 import assert from "node:assert";
 import { computeDiff } from "./diff";
@@ -24,7 +24,7 @@ describe("Plugin integration tests", () => {
 		storage = new Disk(vault);
 		const httpClient = new HttpClient("http", "localhost", {});
 		apiClient = new ApiClient(httpClient);
-		wsClient = new WsClient("localhost");
+		wsClient = new WsClient("ws", "localhost");
 
 		// to remove logs on tests
 		test.mock.method(wsClient, "registerOnError", () => { });
@@ -171,9 +171,9 @@ describe("Plugin integration tests", () => {
 			};
 		});
 		const sendMessage = t.mock.method(wsClient, "sendMessage", () => { });
-		await storage.writeObject("files/newFile.md", "test")
+		await storage.writeObject("files/newFile.md", "test");
 
-		 await plugin.events.create({
+		await plugin.events.create({
 			name: "newFile.md",
 			path: "files/newFile.md",
 			vault,
@@ -236,7 +236,7 @@ describe("Plugin integration tests", () => {
 			};
 		});
 		const sendMessage = t.mock.method(wsClient, "sendMessage", () => { });
-		await storage.writeObject("files/newFile.md", "test")
+		await storage.writeObject("files/newFile.md", "test");
 
 		await plugin.events.create({
 			name: "newFile.md",
@@ -325,10 +325,10 @@ describe("Plugin integration tests", () => {
 		);
 
 		const sendMessage = t.mock.method(wsClient, "sendMessage", () => { });
-		
-		await storage.writeObject("files.md", "test")
-		await storage.writeObject("files/newFile.md", "test")
-		await storage.writeObject("files/anotherFile.md", "test")
+
+		await storage.writeObject("files.md", "test");
+		await storage.writeObject("files/newFile.md", "test");
+		await storage.writeObject("files/anotherFile.md", "test");
 
 		await plugin.events.create({
 			name: "files.md",
@@ -422,7 +422,7 @@ describe("Plugin integration tests", () => {
 			{ times: 1 },
 		);
 		const sendMessage = t.mock.method(wsClient, "sendMessage", () => { });
-		await storage.writeObject("files/oldName.md", "test")
+		await storage.writeObject("files/oldName.md", "test");
 
 		await plugin.events.create({
 			name: "newFile.md",
@@ -524,7 +524,7 @@ describe("Plugin integration tests", () => {
 		);
 
 		const sendMessage = t.mock.method(wsClient, "sendMessage", () => { });
-		await storage.writeObject("oldFolder/file.md", "test")
+		await storage.writeObject("oldFolder/file.md", "test");
 
 		await plugin.events.create({
 			name: "file.md",

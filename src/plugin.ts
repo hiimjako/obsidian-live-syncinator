@@ -1,5 +1,5 @@
 import type { TAbstractFile } from "obsidian";
-import type { ApiClient, FileWithContent } from "./api";
+import type { ApiClient, FileWithContent } from "./api/api";
 import { computeDiff, Operation } from "./diff";
 import type { Disk } from "./storage/storage";
 import {
@@ -7,7 +7,7 @@ import {
 	type ChunkMessage,
 	type EventMessage,
 	type WsClient,
-} from "./ws";
+} from "./api/ws";
 import path from "path-browserify";
 import { isTextFile } from "./utils/mime";
 

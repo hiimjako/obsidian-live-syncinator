@@ -5,9 +5,9 @@ import {
 	SettingTab,
 	type PluginSettings,
 } from "./src/settings";
-import { WsClient } from "src/ws";
-import { HttpClient } from "src/http";
-import { ApiClient } from "src/api";
+import { WsClient } from "./src/api/ws";
+import { HttpClient } from "./src/api/http";
+import { ApiClient } from "./src/api/api";
 import { Disk } from "src/storage/storage";
 import { Syncinator as SyncinatorPlugin } from "src/plugin";
 

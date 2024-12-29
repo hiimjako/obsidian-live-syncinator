@@ -4,7 +4,7 @@ import WebSocket from "ws";
 import { MessageType, WsClient } from "./ws";
 import getPort from "get-port";
 import type { ChunkMessage, EventMessage } from "./ws";
-import { Operation } from "./diff";
+import { Operation } from "../diff";
 
 describe("WsClient with real WebSocket server", () => {
 	let server: WebSocket.Server;
@@ -17,12 +17,12 @@ describe("WsClient with real WebSocket server", () => {
 		server = new WebSocket.Server({ port });
 		lastMessage = null;
 		lastError = null;
-		wsClient = new WsClient(`127.0.0.1:${port}`);
+		wsClient = new WsClient("ws", `127.0.0.1:${port}`);
 		wsClient.registerOnMessage(
 			async (msg: ChunkMessage) => {
 				lastMessage = msg;
 			},
-			async (_: EventMessage) => { },
+			async (_: EventMessage) => {},
 		);
 		wsClient.registerOnError(async (err: Event) => {
 			lastError = err;
@@ -79,7 +79,7 @@ describe("WsClient with real WebSocket server", () => {
 	});
 
 	test("should handle server error", (_, done) => {
-		server.on("connection", () => { });
+		server.on("connection", () => {});
 		server.close();
 
 		setTimeout(() => {

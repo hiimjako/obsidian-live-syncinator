@@ -1,5 +1,4 @@
 import { arrayBufferToBase64, base64ToArrayBuffer } from "./base64Utils";
-import { isTextFile } from "./utils/mime";
 
 type FormField = {
 	name: string;
@@ -38,11 +37,11 @@ export class Multipart {
 		filename: string,
 		value: string | ArrayBuffer,
 	): Multipart {
-		let stringValue: string
+		let stringValue: string;
 		if (value instanceof ArrayBuffer) {
-			stringValue = arrayBufferToBase64(value)
+			stringValue = arrayBufferToBase64(value);
 		} else {
-			stringValue = value
+			stringValue = value;
 		}
 		this._files.push({
 			name: fieldname,
@@ -72,7 +71,7 @@ export class Multipart {
 		}
 
 		if (this._files.length > 0) {
-			body += "\r\n"
+			body += "\r\n";
 		}
 
 		for (let i = 0; i < this._files.length; i++) {
@@ -144,14 +143,14 @@ export class Multipart {
 				isBase64: false,
 			};
 
-			let lastIndexProcessed = 0
+			let lastIndexProcessed = 0;
 			// parsing headers
 			for (let j = 0; j < components.length; j++) {
 				const component = components[j];
 
 				if (component.startsWith("Content-Type:")) {
 					part.contentType = component.substring("Content-Type:".length).trim();
-					lastIndexProcessed = j
+					lastIndexProcessed = j;
 				}
 
 				if (component.startsWith("Content-Disposition:")) {
@@ -160,12 +159,14 @@ export class Multipart {
 
 					part.name = nameMatch ? nameMatch[1].trim() : "";
 					part.filename = filenameMatch ? filenameMatch[1].trim() : "";
-					lastIndexProcessed = j
+					lastIndexProcessed = j;
 				}
 
 				if (component.startsWith("Content-Transfer-Encoding:")) {
-					part.isBase64 = component.substring("Content-Transfer-Encoding:".length).trim() === "base64";
-					lastIndexProcessed = j
+					part.isBase64 =
+						component.substring("Content-Transfer-Encoding:".length).trim() ===
+						"base64";
+					lastIndexProcessed = j;
 				}
 			}
 
@@ -175,7 +176,7 @@ export class Multipart {
 
 				if (component.length !== 0) {
 					if (part.isBase64) {
-						part.value = base64ToArrayBuffer(component.trim())
+						part.value = base64ToArrayBuffer(component.trim());
 					} else {
 						part.value = component.trim();
 					}
