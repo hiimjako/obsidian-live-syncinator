@@ -1,5 +1,3 @@
-import { constrainedMemory } from "process";
-
 enum HttpMethod {
 	GET = "GET",
 	POST = "POST",
@@ -41,7 +39,6 @@ export class HttpClient {
 				this.defaultHeaders["Content-Type"] ||
 				"";
 
-			console.log(reqContentType);
 			if (
 				reqContentType.includes("application/json") ||
 				reqContentType === ""

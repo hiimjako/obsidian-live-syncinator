@@ -18,10 +18,6 @@ try {
 		throw new Error("Functions not found in external library");
 	}
 } catch (error) {
-	console.warn(
-		"Using polyfill for arrayBufferToBase64 and base64ToArrayBuffer",
-	);
-
 	// Polyfill implementation
 	arrayBufferToBase64 = (buffer: ArrayBuffer): string => {
 		const binary = String.fromCharCode(...new Uint8Array(buffer));

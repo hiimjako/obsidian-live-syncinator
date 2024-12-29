@@ -10,6 +10,7 @@ import { HttpClient } from "./src/api/http";
 import { ApiClient } from "./src/api/api";
 import { Disk } from "src/storage/storage";
 import { Syncinator as SyncinatorPlugin } from "src/plugin";
+import { log } from "src/logger/logger";
 
 export default class Syncinator extends Plugin {
 	settings: PluginSettings = DEFAULT_SETTINGS;
@@ -47,7 +48,7 @@ export default class Syncinator extends Plugin {
 				this.settings.workspacePass,
 			);
 		} catch (error) {
-			console.error(error);
+			log.error(error);
 		}
 	}
 

@@ -1,3 +1,4 @@
+import { log } from "src/logger/logger";
 import type { DiffChunk } from "../diff";
 
 export enum MessageType {
@@ -59,10 +60,10 @@ export class WsClient {
 							await eventMessage(msg as EventMessage);
 							break;
 						default:
-							console.log("message type:", msg.type, "not supported");
+							log.info("message type:", msg.type, "not supported");
 					}
 				} catch (err) {
-					console.error(err);
+					log.error(err);
 				}
 			},
 		);

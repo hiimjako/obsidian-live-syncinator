@@ -73,7 +73,6 @@ export class SettingTab extends PluginSettingTab {
 				.setButtonText("save")
 				.setWarning()
 				.onClick(async () => {
-					console.log(this.plugin.settings);
 					await this.plugin.saveSettings();
 				}),
 		);

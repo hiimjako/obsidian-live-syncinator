@@ -9,6 +9,7 @@ import {
 	type WsClient,
 } from "./api/ws";
 import path from "path-browserify";
+import { log } from "src/logger/logger";
 import { isTextFile } from "./utils/mime";
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -40,7 +41,7 @@ export class Syncinator {
 		this.wsClient.registerOnError(this.onError.bind(this));
 		this.wsClient.registerOnClose(async (event) => {
 			if (!event.wasClean) {
-				console.error("WebSocket closed unexpectedly");
+				log.error("WebSocket closed unexpectedly");
 			}
 		});
 
@@ -55,7 +56,7 @@ export class Syncinator {
 	async init() {
 		const files = await this.apiClient.fetchFiles();
 
-		console.log(files);
+		log.info(files);
 		for (const file of files) {
 			this.filePathToId.set(file.workspacePath, file.id);
 
@@ -82,7 +83,7 @@ export class Syncinator {
 						const localFileMtime = new Date(stat?.mtime ?? 0);
 						const remoteFileMtime = new Date(fileWithContent.updatedAt);
 
-						console.log(remoteFileMtime, localFileMtime);
+						log.info(remoteFileMtime, localFileMtime);
 
 						if (remoteFileMtime >= localFileMtime) {
 							await this.storage.writeObject(
@@ -100,24 +101,22 @@ export class Syncinator {
 						fileWithContent.content = content;
 					}
 				} else {
-					console.log(
-						`file ${fileWithContent.workspacePath} is not a text file`,
-					);
+					log.info(`file ${fileWithContent.workspacePath} is not a text file`);
 				}
 			}
 
 			this.fileIdToFile.set(file.id, fileWithContent);
 		}
-		console.log(`fetched ${this.filePathToId.size} files from remote`);
+		log.info(`fetched ${this.filePathToId.size} files from remote`);
 	}
 
 	async onChunkMessage(data: ChunkMessage) {
-		console.log("chunk", data);
+		log.info("chunk", data);
 		const { fileId, chunks } = data;
 
 		const file = this.fileIdToFile.get(fileId);
 		if (file == null) {
-			console.error(`file '${fileId}' not found`);
+			log.error(`file '${fileId}' not found`);
 			return;
 		}
 
@@ -132,7 +131,7 @@ export class Syncinator {
 	}
 
 	async onEventMessage(event: EventMessage) {
-		console.log("[socket] new event", event);
+		log.info("[socket] new event", event);
 
 		// note the maps that keep track of the current files will be updated
 		// in the create and delete events, as creating a file will trigger
@@ -149,13 +148,13 @@ export class Syncinator {
 			} else if (event.objectType === "folder") {
 				this.storage.writeObject(event.workspacePath, "", { isDir: true });
 			} else {
-				console.error("[socket] unknown", event);
+				log.error("[socket] unknown", event);
 			}
 		} else if (event.type === MessageType.Delete) {
 			if (event.objectType === "file") {
 				const file = this.fileIdToFile.get(event.fileId);
 				if (!file) {
-					console.warn(
+					log.warn(
 						`[socket] cannot delete file ${event.fileId} as it is not present in current workspace`,
 					);
 					return;
@@ -169,18 +168,18 @@ export class Syncinator {
 					// FIXME: check if it is only an edge case, given that it should
 					// be the last event in a folder deletion.
 					// The files should be already deleted.
-					console.error("[soket] trying to delete not empty folder");
+					log.error("[soket] trying to delete not empty folder");
 					return;
 				}
 				this.storage.deleteObject(event.workspacePath, { force: true });
 			} else {
-				console.error("[socket] unknown", event);
+				log.error("[socket] unknown", event);
 			}
 		} else if (event.type === MessageType.Rename) {
 			if (event.objectType === "file") {
 				const file = this.fileIdToFile.get(event.fileId);
 				if (!file) {
-					console.warn(
+					log.warn(
 						`[socket] cannot delete file ${event.fileId} as it is not present in current workspace`,
 					);
 					return;
@@ -196,7 +195,7 @@ export class Syncinator {
 					updatedFile.workspacePath = fileApi.workspacePath;
 					this.fileIdToFile.set(fileApi.id, updatedFile);
 				} else {
-					console.error(
+					log.error(
 						`[socket] file ${oldPath} to ${fileApi.workspacePath} not found`,
 					);
 				}
@@ -208,7 +207,7 @@ export class Syncinator {
 					prefix: workspacePath,
 				});
 				if (files.length === 0) {
-					console.error("[socket] trying to rename not existing folder");
+					log.error("[socket] trying to rename not existing folder");
 					return;
 				}
 
@@ -232,7 +231,7 @@ export class Syncinator {
 						updatedFile.workspacePath = fileApi.workspacePath;
 						this.fileIdToFile.set(fileApi.id, updatedFile);
 					} else {
-						console.error(
+						log.error(
 							`[socket] file ${oldPath} to ${fileApi.workspacePath} not found`,
 						);
 					}
@@ -252,20 +251,20 @@ export class Syncinator {
 					await sleep(100);
 				}
 			} else {
-				console.error("[socket] unknown", event);
+				log.error("[socket] unknown", event);
 			}
 		} else {
-			console.error(`[socket] unknown event ${event}`);
+			log.error(`[socket] unknown event ${event}`);
 		}
 	}
 
 	async onError(event: Event) {
-		console.error(event);
+		log.error(event);
 	}
 
 	// FIXME: avoid to trigger again create on ws event
 	private async create(file: TAbstractFile) {
-		console.log("[event]: create", file);
+		log.info("[event]: create", file);
 		if (this.filePathToId.has(file.path)) {
 			return;
 		}
@@ -302,21 +301,21 @@ export class Syncinator {
 			};
 			this.wsClient.sendMessage(msg);
 		} catch (error) {
-			console.error(error);
+			log.error(error);
 		}
 	}
 
 	private async modify(file: TAbstractFile) {
-		console.log("[event]: modify", file);
+		log.info("[event]: modify", file);
 		const fileId = this.filePathToId.get(file.path);
 		if (fileId == null) {
-			console.error(`file '${file.path}' not found`);
+			log.error(`file '${file.path}' not found`);
 			return;
 		}
 
 		const currentFile = this.fileIdToFile.get(fileId);
 		if (currentFile == null) {
-			console.error(`file '${file.path}' not found`);
+			log.error(`file '${file.path}' not found`);
 			return;
 		}
 
@@ -335,7 +334,7 @@ export class Syncinator {
 		this.fileIdToFile.set(fileId, currentFile);
 
 		if (chunks.length > 0) {
-			console.log("modify", { fileId, chunks, oldContent, newContent });
+			log.info("modify", { fileId, chunks, oldContent, newContent });
 
 			const msg: ChunkMessage = {
 				type: MessageType.Chunk,
@@ -348,7 +347,7 @@ export class Syncinator {
 
 	// FIXME: avoid to trigger again delete on ws event
 	private async delete(file: TAbstractFile) {
-		console.log("[event]: delete", file);
+		log.info("[event]: delete", file);
 
 		const deleteFile = async (fileId: number) => {
 			try {
@@ -364,15 +363,13 @@ export class Syncinator {
 				};
 				this.wsClient.sendMessage(msg);
 			} catch (error) {
-				console.error(error);
+				log.error(error);
 			}
 		};
 
 		const fileId = this.filePathToId.get(file.path);
 		if (!fileId) {
-			console.error(
-				`missing file for deletion: "${file.path}", probably a folder`,
-			);
+			log.error(`missing file for deletion: "${file.path}", probably a folder`);
 
 			for (const [filePath, fileId] of this.filePathToId.entries()) {
 				if (filePath.startsWith(file.path + path.sep)) {
@@ -397,17 +394,17 @@ export class Syncinator {
 
 	// FIXME: avoid to trigger again rename on ws event
 	private async rename(file: TAbstractFile, oldPath: string) {
-		console.log("[event]: rename", oldPath, file);
+		log.info("[event]: rename", oldPath, file);
 		const fileId = this.filePathToId.get(oldPath);
 		if (!fileId) {
-			console.error(`missing file for rename: "${oldPath}", probably a folder`);
+			log.error(`missing file for rename: "${oldPath}", probably a folder`);
 
 			const oldWorkspacePath = oldPath + path.sep;
 			const folderFiles = await this.storage.listFiles({
 				prefix: oldWorkspacePath,
 			});
 			if (folderFiles.length === 0) {
-				console.error("[socket] trying to rename not existing folder");
+				log.error("[socket] trying to rename not existing folder");
 				return;
 			}
 
@@ -428,7 +425,7 @@ export class Syncinator {
 				try {
 					await this.apiClient.updateFile(fileId, newFilePath);
 				} catch (error) {
-					console.error(error);
+					log.error(error);
 				}
 
 				this.filePathToId.delete(oldFilePath);
@@ -439,9 +436,7 @@ export class Syncinator {
 					updatedFile.workspacePath = newFilePath;
 					this.fileIdToFile.set(fileId, updatedFile);
 				} else {
-					console.error(
-						`[socket] file ${oldFilePath} to ${newFilePath} not found`,
-					);
+					log.error(`[socket] file ${oldFilePath} to ${newFilePath} not found`);
 				}
 
 				this.storage.rename(oldFilePath, newFilePath);
@@ -481,7 +476,7 @@ export class Syncinator {
 				updatedFile.workspacePath = file.path;
 				this.fileIdToFile.set(fileId, updatedFile);
 			} else {
-				console.error(`file ${oldPath} to ${file.path} not found`);
+				log.error(`file ${oldPath} to ${file.path} not found`);
 			}
 
 			// First we create the file so the other clients can fetch it on event
@@ -493,7 +488,7 @@ export class Syncinator {
 			};
 			this.wsClient.sendMessage(msg);
 		} catch (error) {
-			console.error(error);
+			log.error(error);
 			return;
 		}
 	}
