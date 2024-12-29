@@ -56,7 +56,7 @@ export class Syncinator {
 	async init() {
 		const files = await this.apiClient.fetchFiles();
 
-		log.info(files);
+		log.debug(`fetched ${this.filePathToId.size} files from remote`, files);
 		for (const file of files) {
 			this.filePathToId.set(file.workspacePath, file.id);
 
@@ -101,17 +101,16 @@ export class Syncinator {
 						fileWithContent.content = content;
 					}
 				} else {
-					log.info(`file ${fileWithContent.workspacePath} is not a text file`);
+					log.warn(`file ${fileWithContent.workspacePath} is not a text file`);
 				}
 			}
 
 			this.fileIdToFile.set(file.id, fileWithContent);
 		}
-		log.info(`fetched ${this.filePathToId.size} files from remote`);
 	}
 
 	async onChunkMessage(data: ChunkMessage) {
-		log.info("chunk", data);
+		log.debug("[socket] chunk", data);
 		const { fileId, chunks } = data;
 
 		const file = this.fileIdToFile.get(fileId);
@@ -131,7 +130,7 @@ export class Syncinator {
 	}
 
 	async onEventMessage(event: EventMessage) {
-		log.info("[socket] new event", event);
+		log.debug("[socket] new event", event);
 
 		// note the maps that keep track of the current files will be updated
 		// in the create and delete events, as creating a file will trigger
@@ -264,7 +263,7 @@ export class Syncinator {
 
 	// FIXME: avoid to trigger again create on ws event
 	private async create(file: TAbstractFile) {
-		log.info("[event]: create", file);
+		log.debug("[event]: create", file);
 		if (this.filePathToId.has(file.path)) {
 			return;
 		}
@@ -306,7 +305,7 @@ export class Syncinator {
 	}
 
 	private async modify(file: TAbstractFile) {
-		log.info("[event]: modify", file);
+		log.debug("[event]: modify", file);
 		const fileId = this.filePathToId.get(file.path);
 		if (fileId == null) {
 			log.error(`file '${file.path}' not found`);
@@ -347,7 +346,7 @@ export class Syncinator {
 
 	// FIXME: avoid to trigger again delete on ws event
 	private async delete(file: TAbstractFile) {
-		log.info("[event]: delete", file);
+		log.debug("[event]: delete", file);
 
 		const deleteFile = async (fileId: number) => {
 			try {
@@ -394,7 +393,7 @@ export class Syncinator {
 
 	// FIXME: avoid to trigger again rename on ws event
 	private async rename(file: TAbstractFile, oldPath: string) {
-		log.info("[event]: rename", oldPath, file);
+		log.debug("[event]: rename", oldPath, file);
 		const fileId = this.filePathToId.get(oldPath);
 		if (!fileId) {
 			log.error(`missing file for rename: "${oldPath}", probably a folder`);

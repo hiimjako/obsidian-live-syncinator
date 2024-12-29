@@ -1,12 +1,14 @@
 import type { App } from "obsidian";
 import { Setting, PluginSettingTab } from "obsidian";
 import type Syncinator from "../main";
+import { log, LogLevel, type LogLevelType } from "./logger/logger";
 
 export interface PluginSettings {
 	domain: string;
 	useTLS: boolean;
 	workspaceName: string;
 	workspacePass: string;
+	logLevel: LogLevelType;
 }
 
 export const DEFAULT_SETTINGS: PluginSettings = {
@@ -14,6 +16,7 @@ export const DEFAULT_SETTINGS: PluginSettings = {
 	useTLS: false,
 	workspaceName: "",
 	workspacePass: "",
+	logLevel: LogLevel.WARN,
 };
 
 export class SettingTab extends PluginSettingTab {
@@ -66,6 +69,25 @@ export class SettingTab extends PluginSettingTab {
 				text.setPlaceholder("********").onChange((value) => {
 					this.plugin.settings.workspacePass = value;
 				}),
+			);
+
+		new Setting(containerEl)
+			.setName("Log level")
+			.setDesc("set console log level")
+			.addDropdown((component) =>
+				component
+					.addOptions({
+						"0": "Silent",
+						"1": "Debug",
+						"2": "Info",
+						"3": "Warn",
+						"4": "Error",
+					})
+					.setValue(this.plugin.settings.logLevel.toString())
+					.onChange((value) => {
+						this.plugin.settings.logLevel = Number(value) as LogLevelType;
+						log.setGlobalLevel(this.plugin.settings.logLevel);
+					}),
 			);
 
 		new Setting(containerEl).addButton((button) =>

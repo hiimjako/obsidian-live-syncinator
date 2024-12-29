@@ -56,6 +56,7 @@ export default class Syncinator extends Plugin {
 		// Settings
 		await this.loadSettings();
 		this.addSettingTab(new SettingTab(this.app, this));
+		log.setGlobalLevel(this.settings.logLevel);
 
 		// Init
 		const httpClient = new HttpClient(
