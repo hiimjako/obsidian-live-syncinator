@@ -8,29 +8,29 @@ export const LogLevel = {
 
 export type LogLevelType = (typeof LogLevel)[keyof typeof LogLevel];
 
-let globalLogLevel: LogLevelType = LogLevel.WARN;
+let globalLogLevel: LogLevelType = LogLevel.SILENT;
 
 export class Logger {
 	debug(message: unknown, ...optionalParams: unknown[]) {
-		if (globalLogLevel <= LogLevel.DEBUG) {
+		if (globalLogLevel > LogLevel.SILENT && globalLogLevel <= LogLevel.DEBUG) {
 			console.debug(message, ...optionalParams);
 		}
 	}
 
 	info(message: unknown, ...optionalParams: unknown[]) {
-		if (globalLogLevel <= LogLevel.INFO) {
+		if (globalLogLevel > LogLevel.SILENT && globalLogLevel <= LogLevel.INFO) {
 			console.info(message, ...optionalParams);
 		}
 	}
 
 	warn(message: unknown, ...optionalParams: unknown[]) {
-		if (globalLogLevel <= LogLevel.WARN) {
+		if (globalLogLevel > LogLevel.SILENT && globalLogLevel <= LogLevel.WARN) {
 			console.warn(message, ...optionalParams);
 		}
 	}
 
 	error(message: unknown, ...optionalParams: unknown[]) {
-		if (globalLogLevel <= LogLevel.ERROR) {
+		if (globalLogLevel > LogLevel.SILENT && globalLogLevel <= LogLevel.ERROR) {
 			console.error(message, ...optionalParams);
 		}
 	}
