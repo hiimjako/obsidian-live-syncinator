@@ -11,6 +11,7 @@ import {
 import path from "path-browserify";
 import { log } from "src/logger/logger";
 import { isTextFile } from "./utils/mime";
+import { isText } from "./storage/filetype";
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -54,6 +55,56 @@ export class Syncinator {
 	}
 
 	async init() {
+		await this.fetchRemoteFiles();
+		await this.pushLocalFiles();
+	}
+
+	/**
+	 * Publish to the server the local unsynchronized files
+	 */
+	async pushLocalFiles() {
+		const files = await this.storage.listFiles();
+
+		for (const file of files) {
+			if (this.filePathToId.has(file.path)) {
+				// TODO: we should check local changes
+				continue;
+			}
+
+			let currentContent: string | ArrayBuffer;
+			if (isText(file.path)) {
+				currentContent = await this.storage.readObject(file.path);
+			} else {
+				currentContent = await this.storage.readBinary(file.path);
+			}
+			const fileApi = await this.apiClient.createFile(
+				file.path,
+				currentContent,
+			);
+			this.filePathToId.set(fileApi.workspacePath, fileApi.id);
+			this.fileIdToFile.set(fileApi.id, {
+				...fileApi,
+				content: currentContent,
+			});
+
+			const msg: EventMessage = {
+				type: MessageType.Create,
+				fileId: fileApi.id,
+				objectType: "file",
+				workspacePath: fileApi.workspacePath,
+			};
+			this.wsClient.sendMessage(msg);
+		}
+
+		// this.filePathToId.set(fileApi.workspacePath, fileApi.id);
+		// this.fileIdToFile.set(fileApi.id, {
+		// 	...fileApi,
+		// 	content: "",
+		// });
+		// this.storage.writeObject(fileApi.workspacePath, fileApi.content);
+	}
+
+	async fetchRemoteFiles() {
 		const files = await this.apiClient.fetchFiles();
 
 		log.debug(`fetched ${this.filePathToId.size} files from remote`, files);
@@ -141,7 +192,7 @@ export class Syncinator {
 				this.filePathToId.set(fileApi.workspacePath, fileApi.id);
 				this.fileIdToFile.set(fileApi.id, {
 					...fileApi,
-					content: "",
+					content: fileApi.content,
 				});
 				this.storage.writeObject(fileApi.workspacePath, fileApi.content);
 			} else if (event.objectType === "folder") {
@@ -281,7 +332,12 @@ export class Syncinator {
 		}
 
 		try {
-			const currentContent = await this.storage.readBinary(file.path);
+			let currentContent: string | ArrayBuffer;
+			if (isText(file.path)) {
+				currentContent = await this.storage.readObject(file.path);
+			} else {
+				currentContent = await this.storage.readBinary(file.path);
+			}
 			const fileApi = await this.apiClient.createFile(
 				file.path,
 				currentContent,
@@ -289,7 +345,7 @@ export class Syncinator {
 			this.filePathToId.set(fileApi.workspacePath, fileApi.id);
 			this.fileIdToFile.set(fileApi.id, {
 				...fileApi,
-				content: "",
+				content: currentContent,
 			});
 
 			const msg: EventMessage = {

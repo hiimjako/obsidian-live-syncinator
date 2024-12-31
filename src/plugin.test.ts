@@ -37,123 +37,232 @@ describe("Plugin integration tests", () => {
 		mock.restoreAll();
 	});
 
-	test("should load files on init", async (t) => {
-		const oldTimeDate = new Date();
-		oldTimeDate.setDate(oldTimeDate.getDate() - 1);
-		const oldTime = oldTimeDate.toString();
+	describe("init function", () => {
+		test("should fetch missing files", async (t) => {
+			const oldTimeDate = new Date();
+			oldTimeDate.setDate(oldTimeDate.getDate() - 1);
+			const oldTime = oldTimeDate.toString();
 
-		const fetchFiles = t.mock.method(apiClient, "fetchFiles", (): File[] => {
-			return [
-				{
-					id: 1,
-					workspacePath: "files/newFile.md",
-					diskPath: "",
-					hash: "",
-					createdAt: oldTime,
-					updatedAt: oldTime,
-					mimeType: "",
-					workspaceId: 1,
-				},
-				{
+			const fetchFiles = t.mock.method(apiClient, "fetchFiles", (): File[] => {
+				return [
+					{
+						id: 1,
+						workspacePath: "files/newFile.md",
+						diskPath: "",
+						hash: "",
+						createdAt: oldTime,
+						updatedAt: oldTime,
+						mimeType: "",
+						workspaceId: 1,
+					},
+					{
+						id: 2,
+						workspacePath: "files/alreadyInWorkspace.md",
+						diskPath: "",
+						hash: "",
+						createdAt: oldTime,
+						updatedAt: oldTime,
+						mimeType: "",
+						workspaceId: 1,
+					},
+				];
+			});
+
+			const fetchFile2 = t.mock.method(
+				apiClient,
+				"fetchFile",
+				(): FileWithContent => ({
 					id: 2,
 					workspacePath: "files/alreadyInWorkspace.md",
+					content: "lorem ipsum",
 					diskPath: "",
 					hash: "",
 					createdAt: oldTime,
 					updatedAt: oldTime,
 					mimeType: "",
 					workspaceId: 1,
+				}),
+				{
+					times: 1,
 				},
-			];
+			);
+
+			const fetchFile1 = t.mock.method(
+				apiClient,
+				"fetchFile",
+				(): FileWithContent => ({
+					id: 1,
+					workspacePath: "files/newFile.md",
+					content: "foo",
+					diskPath: "",
+					hash: "",
+					createdAt: oldTime,
+					updatedAt: oldTime,
+					mimeType: "",
+					workspaceId: 1,
+				}),
+				{
+					times: 1,
+				},
+			);
+
+			// inizializing a file in vault, to simulate misalignment
+			storage.writeObject("files/alreadyInWorkspace.md", "lorem baz");
+
+			await plugin.init();
+
+			assert.deepEqual(
+				plugin.getFilePathToId(),
+				new Map([
+					["files/newFile.md", 1],
+					["files/alreadyInWorkspace.md", 2],
+				]),
+			);
+
+			assert.deepEqual(
+				plugin.getFileIdToFile(),
+				new Map([
+					[
+						1,
+						{
+							content: "foo",
+							createdAt: oldTime,
+							diskPath: "",
+							hash: "",
+							id: 1,
+							mimeType: "",
+							updatedAt: oldTime,
+							workspaceId: 1,
+							workspacePath: "files/newFile.md",
+						},
+					],
+					[
+						2,
+						{
+							content: "lorem ipsum",
+							createdAt: oldTime,
+							diskPath: "",
+							hash: "",
+							id: 2,
+							mimeType: "",
+							updatedAt: oldTime,
+							workspaceId: 1,
+							workspacePath: "files/alreadyInWorkspace.md",
+						},
+					],
+				]),
+			);
+			assert.strictEqual(fetchFiles.mock.callCount(), 1);
+			assert.strictEqual(fetchFile1.mock.callCount(), 1);
+			assert.strictEqual(fetchFile2.mock.callCount(), 1);
 		});
 
-		const fetchFile2 = t.mock.method(
-			apiClient,
-			"fetchFile",
-			(): FileWithContent => ({
-				id: 2,
-				workspacePath: "files/alreadyInWorkspace.md",
-				content: "lorem ipsum",
-				diskPath: "",
-				hash: "",
-				createdAt: oldTime,
-				updatedAt: oldTime,
-				mimeType: "",
-				workspaceId: 1,
-			}),
-			{
-				times: 1,
-			},
-		);
+		test("should post files not in remote", async (t) => {
+			const oldTimeDate = new Date();
+			oldTimeDate.setDate(oldTimeDate.getDate() - 1);
+			const oldTime = oldTimeDate.toString();
+			const creationTime = new Date().toString();
 
-		const fetchFile1 = t.mock.method(
-			apiClient,
-			"fetchFile",
-			(): FileWithContent => ({
-				id: 1,
-				workspacePath: "files/newFile.md",
-				content: "foo",
-				diskPath: "",
-				hash: "",
-				createdAt: oldTime,
-				updatedAt: oldTime,
-				mimeType: "",
-				workspaceId: 1,
-			}),
-			{
-				times: 1,
-			},
-		);
-
-		// inizializing a file in vault, to simulate misalignment
-		storage.writeObject("files/alreadyInWorkspace.md", "lorem baz");
-
-		await plugin.init();
-
-		assert.deepEqual(
-			plugin.getFilePathToId(),
-			new Map([
-				["files/newFile.md", 1],
-				["files/alreadyInWorkspace.md", 2],
-			]),
-		);
-
-		assert.deepEqual(
-			plugin.getFileIdToFile(),
-			new Map([
-				[
-					1,
+			const sendMessage = t.mock.method(wsClient, "sendMessage", () => { });
+			const fetchFiles = t.mock.method(apiClient, "fetchFiles", (): File[] => {
+				return [
 					{
-						content: "foo",
-						createdAt: oldTime,
-						diskPath: "",
-						hash: "",
 						id: 1,
-						mimeType: "",
-						updatedAt: oldTime,
-						workspaceId: 1,
-						workspacePath: "files/newFile.md",
-					},
-				],
-				[
-					2,
-					{
-						content: "lorem ipsum",
-						createdAt: oldTime,
+						workspacePath: "files/alreadyInRemote.md",
 						diskPath: "",
 						hash: "",
-						id: 2,
-						mimeType: "",
+						createdAt: oldTime,
 						updatedAt: oldTime,
+						mimeType: "",
 						workspaceId: 1,
-						workspacePath: "files/alreadyInWorkspace.md",
 					},
-				],
-			]),
-		);
-		assert.strictEqual(fetchFiles.mock.callCount(), 1);
-		assert.strictEqual(fetchFile1.mock.callCount(), 1);
-		assert.strictEqual(fetchFile2.mock.callCount(), 1);
+				];
+			});
+
+			const fetchFile = t.mock.method(
+				apiClient,
+				"fetchFile",
+				(): FileWithContent => ({
+					id: 1,
+					workspacePath: "files/alreadyInRemote.md",
+					content: "lorem bar",
+					diskPath: "",
+					hash: "",
+					createdAt: oldTime,
+					updatedAt: oldTime,
+					mimeType: "",
+					workspaceId: 1,
+				}),
+				{
+					times: 1,
+				},
+			);
+
+			const createFile = t.mock.method(apiClient, "createFile", (): File => {
+				return {
+					id: 2,
+					workspacePath: "files/localOnly.md",
+					diskPath: "",
+					hash: "",
+					createdAt: creationTime,
+					updatedAt: creationTime,
+					mimeType: "",
+					workspaceId: 1,
+				};
+			});
+
+			// inizializing a file in vault, to simulate misalignment
+			storage.writeObject("files/alreadyInRemote.md", "lorem bar");
+			storage.writeObject("files/localOnly.md", "lorem foo");
+
+			await plugin.init();
+
+			assert.deepEqual(
+				plugin.getFilePathToId(),
+				new Map([
+					["files/alreadyInRemote.md", 1],
+					["files/localOnly.md", 2],
+				]),
+			);
+
+			assert.deepEqual(
+				plugin.getFileIdToFile(),
+				new Map([
+					[
+						1,
+						{
+							content: "lorem bar",
+							createdAt: oldTime,
+							diskPath: "",
+							hash: "",
+							id: 1,
+							mimeType: "",
+							updatedAt: oldTime,
+							workspaceId: 1,
+							workspacePath: "files/alreadyInRemote.md",
+						},
+					],
+					[
+						2,
+						{
+							content: "lorem foo",
+							createdAt: creationTime,
+							diskPath: "",
+							hash: "",
+							id: 2,
+							mimeType: "",
+							updatedAt: creationTime,
+							workspaceId: 1,
+							workspacePath: "files/localOnly.md",
+						},
+					],
+				]),
+			);
+			assert.strictEqual(fetchFiles.mock.callCount(), 1);
+			assert.strictEqual(fetchFile.mock.callCount(), 1);
+			assert.strictEqual(createFile.mock.callCount(), 1);
+			assert.strictEqual(sendMessage.mock.callCount(), 1);
+		});
 	});
 
 	test("should create a file on obsidian event 'create'", async (t) => {
@@ -198,7 +307,7 @@ describe("Plugin integration tests", () => {
 				[
 					1,
 					{
-						content: "",
+						content: "test",
 						createdAt: now,
 						diskPath: "",
 						hash: "",
@@ -456,7 +565,7 @@ describe("Plugin integration tests", () => {
 				[
 					1,
 					{
-						content: "",
+						content: "test",
 						createdAt: now,
 						diskPath: "",
 						hash: "",
@@ -558,7 +667,7 @@ describe("Plugin integration tests", () => {
 				[
 					1,
 					{
-						content: "",
+						content: "test",
 						createdAt: now,
 						diskPath: "",
 						hash: "",
