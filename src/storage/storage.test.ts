@@ -73,7 +73,7 @@ describe("Disk storage integration tests", () => {
 		for (const tt of tests) {
 			await test(tt.name, async () => {
 				const fileName = randomUUID();
-				await d.writeObject(fileName, tt.initialContent);
+				await d.write(fileName, tt.initialContent);
 
 				assert.strictEqual(await d.exists(fileName), true);
 
@@ -82,7 +82,7 @@ describe("Disk storage integration tests", () => {
 					content = await d.persistChunks(fileName, di);
 				}
 
-				const fileContent = await d.readObject(fileName);
+				const fileContent = await d.readText(fileName);
 				assert.strictEqual(fileContent.toString(), tt.expected);
 				assert.strictEqual(content, tt.expected);
 			});
@@ -103,9 +103,9 @@ describe("Disk storage integration tests", () => {
 		const path1 = "folder/file1.md";
 		const path2 = "folder/file2.png";
 		const path3 = "anotherFolder/file1.md";
-		await d.writeObject(path1, "");
-		await d.writeObject(path2, "");
-		await d.writeObject(path3, "");
+		await d.write(path1, "");
+		await d.write(path2, "");
+		await d.write(path3, "");
 
 		/*@ts-ignore*/
 		const listFilesNames = async (opts = {}): Promise<string[]> => {
@@ -142,20 +142,20 @@ describe("Disk storage integration tests", () => {
 		const path = "foo/bar/baz.md";
 		const content = "hello";
 
-		await d.writeObject(path, content);
+		await d.write(path, content);
 		assert.strictEqual(createFolderMock.mock.callCount(), 2);
 		assert.strictEqual(existsMock.mock.callCount(), 3);
 		assert.strictEqual(writeMock.mock.callCount(), 1);
 
 		// read object
-		const fileContent = await d.readObject(path);
+		const fileContent = await d.readText(path);
 		assert.deepStrictEqual(fileContent, content);
 
 		assert.strictEqual(getFileByPath.mock.callCount(), 1);
 		assert.strictEqual(cachedRead.mock.callCount(), 1);
 
 		// delete object
-		await d.deleteObject(path);
+		await d.delete(path);
 		assert.strictEqual(getFileByPath.mock.callCount(), 2);
 		assert.strictEqual(getFolderByPath.mock.callCount(), 1);
 		assert.strictEqual(del.mock.callCount(), 1);

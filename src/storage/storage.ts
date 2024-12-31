@@ -38,7 +38,7 @@ export class Disk {
 
 	// writeObject creates and writes to file. If the files doesn't exists it will
 	// throw an error. Use `force: true` to overwrite the file.
-	async writeObject(
+	async write(
 		vaultPath: string,
 		content: string | ArrayBuffer,
 		opts: WriteOptions = { force: false, isDir: false },
@@ -69,10 +69,7 @@ export class Disk {
 		}
 	}
 
-	async deleteObject(
-		vaultPath: string,
-		{ force } = { force: false },
-	): Promise<void> {
+	async delete(vaultPath: string, { force } = { force: false }): Promise<void> {
 		const file = this.vault.getFileByPath(vaultPath);
 		const folder = this.vault.getFolderByPath(vaultPath);
 
@@ -102,7 +99,7 @@ export class Disk {
 		return files;
 	}
 
-	async readObject(vaultPath: string): Promise<string> {
+	async readText(vaultPath: string): Promise<string> {
 		const file = this.vault.getFileByPath(vaultPath);
 
 		if (file == null) {

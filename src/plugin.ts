@@ -73,7 +73,7 @@ export class Syncinator {
 
 			let currentContent: string | ArrayBuffer;
 			if (isText(file.path)) {
-				currentContent = await this.storage.readObject(file.path);
+				currentContent = await this.storage.readText(file.path);
 			} else {
 				currentContent = await this.storage.readBinary(file.path);
 			}
@@ -103,13 +103,13 @@ export class Syncinator {
 
 			this.fileCache.create(fileWithContent)
 			if (!exists) {
-				await this.storage.writeObject(
+				await this.storage.write(
 					file.workspacePath,
 					fileWithContent.content,
 				);
 			} else {
 				if (typeof fileWithContent.content === "string") {
-					const currentContent = await this.storage.readObject(
+					const currentContent = await this.storage.readText(
 						file.workspacePath,
 					);
 					const diffs = computeDiff(currentContent, fileWithContent.content);
@@ -129,7 +129,7 @@ export class Syncinator {
 								...file,
 								content: fileWithContent.content,
 							})
-							await this.storage.writeObject(
+							await this.storage.write(
 								file.workspacePath,
 								fileWithContent.content,
 								{ force: true },
@@ -181,9 +181,9 @@ export class Syncinator {
 			if (event.objectType === "file") {
 				const fileApi = await this.apiClient.fetchFile(event.fileId);
 				this.fileCache.create(fileApi)
-				this.storage.writeObject(fileApi.workspacePath, fileApi.content);
+				this.storage.write(fileApi.workspacePath, fileApi.content);
 			} else if (event.objectType === "folder") {
-				this.storage.writeObject(event.workspacePath, "", { isDir: true });
+				this.storage.write(event.workspacePath, "", { isDir: true });
 			} else {
 				log.error("[socket] unknown", event);
 			}
@@ -196,7 +196,7 @@ export class Syncinator {
 					);
 					return;
 				}
-				this.storage.deleteObject(file.workspacePath, { force: true });
+				this.storage.delete(file.workspacePath, { force: true });
 			} else if (event.objectType === "folder") {
 				const files = await this.storage.listFiles({
 					prefix: event.workspacePath,
@@ -208,7 +208,7 @@ export class Syncinator {
 					log.error("[soket] trying to delete not empty folder");
 					return;
 				}
-				this.storage.deleteObject(event.workspacePath, { force: true });
+				this.storage.delete(event.workspacePath, { force: true });
 			} else {
 				log.error("[socket] unknown", event);
 			}
@@ -220,7 +220,7 @@ export class Syncinator {
 
 					const fileApi = await this.apiClient.fetchFile(event.fileId);
 					this.fileCache.create(fileApi)
-					await this.storage.writeObject(fileApi.workspacePath, fileApi.content)
+					await this.storage.write(fileApi.workspacePath, fileApi.content)
 
 					return;
 				}
@@ -259,7 +259,7 @@ export class Syncinator {
 				for (let i = 0; i < 10; i++) {
 					const filesPostRename = await this.storage.listFiles({ prefix: workspacePath });
 					if (filesPostRename.length === 0) {
-						this.storage.deleteObject(event.workspacePath);
+						this.storage.delete(event.workspacePath);
 						break;
 					}
 					await sleep(100);
@@ -298,7 +298,7 @@ export class Syncinator {
 		try {
 			let currentContent: string | ArrayBuffer;
 			if (isText(file.path)) {
-				currentContent = await this.storage.readObject(file.path);
+				currentContent = await this.storage.readText(file.path);
 			} else {
 				currentContent = await this.storage.readBinary(file.path);
 			}
@@ -336,7 +336,7 @@ export class Syncinator {
 			return;
 		}
 
-		const newContent = await this.storage.readObject(file.path);
+		const newContent = await this.storage.readText(file.path);
 		const chunks = computeDiff(currentFile.content, newContent);
 
 		const oldContent = currentFile.content;
@@ -442,7 +442,7 @@ export class Syncinator {
 					prefix: oldWorkspacePath,
 				});
 				if (filesPostRename.length === 0) {
-					this.storage.deleteObject(oldPath, { force: true });
+					this.storage.delete(oldPath, { force: true });
 					break;
 				}
 				await sleep(100);

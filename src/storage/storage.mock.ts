@@ -78,7 +78,7 @@ export function CreateVaultMock(basepath: string): Vault {
 			const vaultPath = basepath;
 			const filenames: TFile[] = [];
 
-			let subGetFiles: (basepath: string, subPath: string) => void = () => { };
+			let subGetFiles: (basepath: string, subPath: string) => void = () => {};
 			subGetFiles = (basepath: string, subPath: string) => {
 				const items = readdirSync(path.join(basepath, subPath));
 
@@ -113,7 +113,7 @@ export function CreateVaultMock(basepath: string): Vault {
 		getMarkdownFiles() {
 			const filenames: TFile[] = [];
 
-			let subGetFiles: (basepath: string, subPath: string) => void = () => { };
+			let subGetFiles: (basepath: string, subPath: string) => void = () => {};
 			subGetFiles = (basepath: string, subPath: string) => {
 				const items = readdirSync(path.join(basepath, subPath));
 

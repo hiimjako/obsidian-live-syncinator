@@ -2,9 +2,7 @@ import path from "path-browserify";
 import textExtensions from "textextensions";
 import binaryExtensions from "binaryextensions";
 
-export function isText(
-	filename: string,
-): boolean {
+export function isText(filename: string): boolean {
 	const parts = path.basename(filename).split(".").reverse();
 
 	for (const extension of parts) {
@@ -19,4 +17,3 @@ export function isText(
 	// TODO: it should detect the type from the content as fallback
 	return false;
 }
-

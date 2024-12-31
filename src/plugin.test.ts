@@ -107,7 +107,7 @@ describe("Plugin integration tests", () => {
 			);
 
 			// inizializing a file in vault, to simulate misalignment
-			storage.writeObject("files/alreadyInWorkspace.md", "lorem baz");
+			storage.write("files/alreadyInWorkspace.md", "lorem baz");
 
 			await plugin.init();
 
@@ -195,8 +195,8 @@ describe("Plugin integration tests", () => {
 			});
 
 			// inizializing a file in vault, to simulate misalignment
-			storage.writeObject("files/alreadyInRemote.md", "lorem bar");
-			storage.writeObject("files/localOnly.md", "lorem foo");
+			storage.write("files/alreadyInRemote.md", "lorem bar");
+			storage.write("files/localOnly.md", "lorem foo");
 
 			await plugin.init();
 
@@ -246,7 +246,7 @@ describe("Plugin integration tests", () => {
 			};
 		});
 		const sendMessage = t.mock.method(wsClient, "sendMessage", () => {});
-		await storage.writeObject("files/newFile.md", "test");
+		await storage.write("files/newFile.md", "test");
 
 		await plugin.events.create({
 			name: "newFile.md",
@@ -302,7 +302,7 @@ describe("Plugin integration tests", () => {
 			};
 		});
 		const sendMessage = t.mock.method(wsClient, "sendMessage", () => {});
-		await storage.writeObject("files/newFile.md", "test");
+		await storage.write("files/newFile.md", "test");
 
 		await plugin.events.create({
 			name: "newFile.md",
@@ -403,9 +403,9 @@ describe("Plugin integration tests", () => {
 
 		const sendMessage = t.mock.method(wsClient, "sendMessage", () => {});
 
-		await storage.writeObject("files.md", "test");
-		await storage.writeObject("files/newFile.md", "test");
-		await storage.writeObject("files/anotherFile.md", "test");
+		await storage.write("files.md", "test");
+		await storage.write("files/newFile.md", "test");
+		await storage.write("files/anotherFile.md", "test");
 
 		await plugin.events.create({
 			name: "files.md",
@@ -538,7 +538,7 @@ describe("Plugin integration tests", () => {
 			{ times: 1 },
 		);
 		const sendMessage = t.mock.method(wsClient, "sendMessage", () => {});
-		await storage.writeObject("files/oldName.md", "test");
+		await storage.write("files/oldName.md", "test");
 
 		await plugin.events.create({
 			name: "newFile.md",
@@ -639,7 +639,7 @@ describe("Plugin integration tests", () => {
 		);
 
 		const sendMessage = t.mock.method(wsClient, "sendMessage", () => {});
-		await storage.writeObject("oldFolder/file.md", "test");
+		await storage.write("oldFolder/file.md", "test");
 
 		await plugin.events.create({
 			name: "file.md",
@@ -718,7 +718,7 @@ describe("Plugin integration tests", () => {
 			};
 		});
 
-		await storage.writeObject("files/modifiedByWs.md", "lorem ipsum");
+		await storage.write("files/modifiedByWs.md", "lorem ipsum");
 		await plugin.events.create({
 			name: "modifiedByWs.md",
 			path: "files/modifiedByWs.md",
