@@ -27,7 +27,7 @@ describe("Plugin integration tests", () => {
 		wsClient = new WsClient("ws", "localhost");
 
 		// to remove logs on tests
-		test.mock.method(wsClient, "registerOnError", () => { });
+		test.mock.method(wsClient, "registerOnError", () => {});
 
 		plugin = new Syncinator(storage, apiClient, wsClient);
 	});
@@ -111,47 +111,30 @@ describe("Plugin integration tests", () => {
 
 			await plugin.init();
 
-			assert.deepEqual(
-				plugin.getFilePathToId(),
-				new Map([
-					["files/newFile.md", 1],
-					["files/alreadyInWorkspace.md", 2],
-				]),
-			);
-
-			assert.deepEqual(
-				plugin.getFileIdToFile(),
-				new Map([
-					[
-						1,
-						{
-							content: "foo",
-							createdAt: oldTime,
-							diskPath: "",
-							hash: "",
-							id: 1,
-							mimeType: "",
-							updatedAt: oldTime,
-							workspaceId: 1,
-							workspacePath: "files/newFile.md",
-						},
-					],
-					[
-						2,
-						{
-							content: "lorem ipsum",
-							createdAt: oldTime,
-							diskPath: "",
-							hash: "",
-							id: 2,
-							mimeType: "",
-							updatedAt: oldTime,
-							workspaceId: 1,
-							workspacePath: "files/alreadyInWorkspace.md",
-						},
-					],
-				]),
-			);
+			assert.deepEqual(plugin.cacheDump(), [
+				{
+					content: "foo",
+					createdAt: oldTime,
+					diskPath: "",
+					hash: "",
+					id: 1,
+					mimeType: "",
+					updatedAt: oldTime,
+					workspaceId: 1,
+					workspacePath: "files/newFile.md",
+				},
+				{
+					content: "lorem ipsum",
+					createdAt: oldTime,
+					diskPath: "",
+					hash: "",
+					id: 2,
+					mimeType: "",
+					updatedAt: oldTime,
+					workspaceId: 1,
+					workspacePath: "files/alreadyInWorkspace.md",
+				},
+			]);
 			assert.strictEqual(fetchFiles.mock.callCount(), 1);
 			assert.strictEqual(fetchFile1.mock.callCount(), 1);
 			assert.strictEqual(fetchFile2.mock.callCount(), 1);
@@ -163,7 +146,7 @@ describe("Plugin integration tests", () => {
 			const oldTime = oldTimeDate.toString();
 			const creationTime = new Date().toString();
 
-			const sendMessage = t.mock.method(wsClient, "sendMessage", () => { });
+			const sendMessage = t.mock.method(wsClient, "sendMessage", () => {});
 			const fetchFiles = t.mock.method(apiClient, "fetchFiles", (): File[] => {
 				return [
 					{
@@ -217,47 +200,30 @@ describe("Plugin integration tests", () => {
 
 			await plugin.init();
 
-			assert.deepEqual(
-				plugin.getFilePathToId(),
-				new Map([
-					["files/alreadyInRemote.md", 1],
-					["files/localOnly.md", 2],
-				]),
-			);
-
-			assert.deepEqual(
-				plugin.getFileIdToFile(),
-				new Map([
-					[
-						1,
-						{
-							content: "lorem bar",
-							createdAt: oldTime,
-							diskPath: "",
-							hash: "",
-							id: 1,
-							mimeType: "",
-							updatedAt: oldTime,
-							workspaceId: 1,
-							workspacePath: "files/alreadyInRemote.md",
-						},
-					],
-					[
-						2,
-						{
-							content: "lorem foo",
-							createdAt: creationTime,
-							diskPath: "",
-							hash: "",
-							id: 2,
-							mimeType: "",
-							updatedAt: creationTime,
-							workspaceId: 1,
-							workspacePath: "files/localOnly.md",
-						},
-					],
-				]),
-			);
+			assert.deepEqual(plugin.cacheDump(), [
+				{
+					content: "lorem bar",
+					createdAt: oldTime,
+					diskPath: "",
+					hash: "",
+					id: 1,
+					mimeType: "",
+					updatedAt: oldTime,
+					workspaceId: 1,
+					workspacePath: "files/alreadyInRemote.md",
+				},
+				{
+					content: "lorem foo",
+					createdAt: creationTime,
+					diskPath: "",
+					hash: "",
+					id: 2,
+					mimeType: "",
+					updatedAt: creationTime,
+					workspaceId: 1,
+					workspacePath: "files/localOnly.md",
+				},
+			]);
 			assert.strictEqual(fetchFiles.mock.callCount(), 1);
 			assert.strictEqual(fetchFile.mock.callCount(), 1);
 			assert.strictEqual(createFile.mock.callCount(), 1);
@@ -279,7 +245,7 @@ describe("Plugin integration tests", () => {
 				workspaceId: 1,
 			};
 		});
-		const sendMessage = t.mock.method(wsClient, "sendMessage", () => { });
+		const sendMessage = t.mock.method(wsClient, "sendMessage", () => {});
 		await storage.writeObject("files/newFile.md", "test");
 
 		await plugin.events.create({
@@ -297,29 +263,19 @@ describe("Plugin integration tests", () => {
 			parent: null,
 		});
 
-		assert.deepEqual(
-			plugin.getFilePathToId(),
-			new Map([["files/newFile.md", 1]]),
-		);
-		assert.deepEqual(
-			plugin.getFileIdToFile(),
-			new Map([
-				[
-					1,
-					{
-						content: "test",
-						createdAt: now,
-						diskPath: "",
-						hash: "",
-						id: 1,
-						mimeType: "",
-						updatedAt: now,
-						workspaceId: 1,
-						workspacePath: "files/newFile.md",
-					},
-				],
-			]),
-		);
+		assert.deepEqual(plugin.cacheDump(), [
+			{
+				content: "test",
+				createdAt: now,
+				diskPath: "",
+				hash: "",
+				id: 1,
+				mimeType: "",
+				updatedAt: now,
+				workspaceId: 1,
+				workspacePath: "files/newFile.md",
+			},
+		]);
 		assert.strictEqual(createFile.mock.callCount(), 1);
 		assert.strictEqual(sendMessage.mock.callCount(), 1);
 		assert.deepEqual(sendMessage.mock.calls[0].arguments[0], {
@@ -331,20 +287,21 @@ describe("Plugin integration tests", () => {
 	});
 
 	test("should delete a file on obsidian event 'delete'", async (t) => {
-		const deleteFile = t.mock.method(apiClient, "deleteFile", () => { });
+		const now = new Date().toString();
+		const deleteFile = t.mock.method(apiClient, "deleteFile", () => {});
 		const createFile = t.mock.method(apiClient, "createFile", (): File => {
 			return {
 				id: 1,
 				workspacePath: "files/newFile.md",
 				diskPath: "",
 				hash: "",
-				createdAt: new Date().toString(),
-				updatedAt: new Date().toString(),
+				createdAt: now,
+				updatedAt: now,
 				mimeType: "",
 				workspaceId: 1,
 			};
 		});
-		const sendMessage = t.mock.method(wsClient, "sendMessage", () => { });
+		const sendMessage = t.mock.method(wsClient, "sendMessage", () => {});
 		await storage.writeObject("files/newFile.md", "test");
 
 		await plugin.events.create({
@@ -354,10 +311,19 @@ describe("Plugin integration tests", () => {
 			parent: null,
 		});
 
-		assert.deepEqual(
-			plugin.getFilePathToId(),
-			new Map([["files/newFile.md", 1]]),
-		);
+		assert.deepEqual(plugin.cacheDump(), [
+			{
+				id: 1,
+				workspacePath: "files/newFile.md",
+				diskPath: "",
+				hash: "",
+				createdAt: now,
+				updatedAt: now,
+				mimeType: "",
+				workspaceId: 1,
+				content: "test",
+			},
+		]);
 
 		await plugin.events.delete({
 			name: "newFile.md",
@@ -366,7 +332,8 @@ describe("Plugin integration tests", () => {
 			parent: null,
 		});
 
-		assert.deepEqual(plugin.getFilePathToId(), new Map());
+		assert.deepEqual(plugin.cacheDump(), []);
+
 		assert.strictEqual(deleteFile.mock.callCount(), 1);
 		assert.strictEqual(createFile.mock.callCount(), 1);
 		// one call for create and the second for delete
@@ -380,7 +347,8 @@ describe("Plugin integration tests", () => {
 	});
 
 	test("should delete a folder on obsidian event 'delete'", async (t) => {
-		const deleteFile = t.mock.method(apiClient, "deleteFile", () => { });
+		const now = new Date().toString();
+		const deleteFile = t.mock.method(apiClient, "deleteFile", () => {});
 		const createFile = t.mock.method(
 			apiClient,
 			"createFile",
@@ -390,8 +358,8 @@ describe("Plugin integration tests", () => {
 					workspacePath: "files/anotherFile.md",
 					diskPath: "",
 					hash: "",
-					createdAt: new Date().toString(),
-					updatedAt: new Date().toString(),
+					createdAt: now,
+					updatedAt: now,
 					mimeType: "",
 					workspaceId: 1,
 				};
@@ -407,8 +375,8 @@ describe("Plugin integration tests", () => {
 					workspacePath: "files/newFile.md",
 					diskPath: "",
 					hash: "",
-					createdAt: new Date().toString(),
-					updatedAt: new Date().toString(),
+					createdAt: now,
+					updatedAt: now,
 					mimeType: "",
 					workspaceId: 1,
 				};
@@ -424,8 +392,8 @@ describe("Plugin integration tests", () => {
 					workspacePath: "files.md",
 					diskPath: "",
 					hash: "",
-					createdAt: new Date().toString(),
-					updatedAt: new Date().toString(),
+					createdAt: now,
+					updatedAt: now,
 					mimeType: "",
 					workspaceId: 1,
 				};
@@ -433,7 +401,7 @@ describe("Plugin integration tests", () => {
 			{ times: 1 },
 		);
 
-		const sendMessage = t.mock.method(wsClient, "sendMessage", () => { });
+		const sendMessage = t.mock.method(wsClient, "sendMessage", () => {});
 
 		await storage.writeObject("files.md", "test");
 		await storage.writeObject("files/newFile.md", "test");
@@ -460,14 +428,41 @@ describe("Plugin integration tests", () => {
 			parent: null,
 		});
 
-		assert.deepEqual(
-			plugin.getFilePathToId(),
-			new Map([
-				["files/anotherFile.md", 1],
-				["files/newFile.md", 2],
-				["files.md", 3],
-			]),
-		);
+		assert.deepEqual(plugin.cacheDump(), [
+			{
+				id: 3,
+				workspacePath: "files.md",
+				diskPath: "",
+				hash: "",
+				createdAt: new Date().toString(),
+				updatedAt: new Date().toString(),
+				mimeType: "",
+				workspaceId: 1,
+				content: "test",
+			},
+			{
+				id: 2,
+				workspacePath: "files/newFile.md",
+				diskPath: "",
+				hash: "",
+				createdAt: new Date().toString(),
+				updatedAt: new Date().toString(),
+				mimeType: "",
+				workspaceId: 1,
+				content: "test",
+			},
+			{
+				id: 1,
+				workspacePath: "files/anotherFile.md",
+				diskPath: "",
+				hash: "",
+				createdAt: new Date().toString(),
+				updatedAt: new Date().toString(),
+				mimeType: "",
+				workspaceId: 1,
+				content: "test",
+			},
+		]);
 
 		await plugin.events.delete({
 			name: "files",
@@ -476,8 +471,20 @@ describe("Plugin integration tests", () => {
 			parent: null,
 		});
 
-		assert.deepEqual(plugin.getFilePathToId(), new Map([["files.md", 3]]));
-		assert.equal(plugin.getFileIdToFile().has(3), true);
+		assert.deepEqual(plugin.cacheDump(), [
+			{
+				id: 3,
+				workspacePath: "files.md",
+				diskPath: "",
+				hash: "",
+				createdAt: new Date().toString(),
+				updatedAt: new Date().toString(),
+				mimeType: "",
+				workspaceId: 1,
+				content: "test",
+			},
+		]);
+
 		assert.strictEqual(deleteFile.mock.callCount(), 2);
 		assert.strictEqual(createFile.mock.callCount(), 1);
 		assert.strictEqual(createFile2.mock.callCount(), 1);
@@ -512,7 +519,7 @@ describe("Plugin integration tests", () => {
 
 	test("should rename a file on obsidian event 'rename'", async (t) => {
 		const now = new Date().toString();
-		const renameFile = t.mock.method(apiClient, "updateFile", () => { });
+		const renameFile = t.mock.method(apiClient, "updateFile", () => {});
 		const createOldFile = t.mock.method(
 			apiClient,
 			"createFile",
@@ -530,7 +537,7 @@ describe("Plugin integration tests", () => {
 			},
 			{ times: 1 },
 		);
-		const sendMessage = t.mock.method(wsClient, "sendMessage", () => { });
+		const sendMessage = t.mock.method(wsClient, "sendMessage", () => {});
 		await storage.writeObject("files/oldName.md", "test");
 
 		await plugin.events.create({
@@ -540,10 +547,19 @@ describe("Plugin integration tests", () => {
 			parent: null,
 		});
 
-		assert.deepEqual(
-			plugin.getFilePathToId(),
-			new Map([["files/oldName.md", 1]]),
-		);
+		assert.deepEqual(plugin.cacheDump(), [
+			{
+				content: "test",
+				createdAt: now,
+				diskPath: "",
+				hash: "",
+				id: 1,
+				mimeType: "",
+				updatedAt: now,
+				workspaceId: 1,
+				workspacePath: "files/oldName.md",
+			},
+		]);
 
 		await plugin.events.rename(
 			{
@@ -555,29 +571,19 @@ describe("Plugin integration tests", () => {
 			"files/oldName.md",
 		);
 
-		assert.deepEqual(
-			plugin.getFilePathToId(),
-			new Map([["files/newName.md", 1]]),
-		);
-		assert.deepEqual(
-			plugin.getFileIdToFile(),
-			new Map([
-				[
-					1,
-					{
-						content: "test",
-						createdAt: now,
-						diskPath: "",
-						hash: "",
-						id: 1,
-						mimeType: "",
-						updatedAt: now,
-						workspaceId: 1,
-						workspacePath: "files/newName.md",
-					},
-				],
-			]),
-		);
+		assert.deepEqual(plugin.cacheDump(), [
+			{
+				content: "test",
+				createdAt: now,
+				diskPath: "",
+				hash: "",
+				id: 1,
+				mimeType: "",
+				updatedAt: now,
+				workspaceId: 1,
+				workspacePath: "files/newName.md",
+			},
+		]);
 		assert.strictEqual(renameFile.mock.callCount(), 1);
 		assert.deepEqual(renameFile.mock.calls[0].arguments, [
 			1,
@@ -632,7 +638,7 @@ describe("Plugin integration tests", () => {
 			{ times: 1 },
 		);
 
-		const sendMessage = t.mock.method(wsClient, "sendMessage", () => { });
+		const sendMessage = t.mock.method(wsClient, "sendMessage", () => {});
 		await storage.writeObject("oldFolder/file.md", "test");
 
 		await plugin.events.create({
@@ -642,10 +648,19 @@ describe("Plugin integration tests", () => {
 			parent: null,
 		});
 
-		assert.deepEqual(
-			plugin.getFilePathToId(),
-			new Map([["oldFolder/file.md", 1]]),
-		);
+		assert.deepEqual(plugin.cacheDump(), [
+			{
+				id: 1,
+				workspacePath: "oldFolder/file.md",
+				diskPath: "",
+				hash: "",
+				createdAt: now,
+				updatedAt: now,
+				mimeType: "",
+				workspaceId: 1,
+				content: "test",
+			},
+		]);
 
 		await plugin.events.rename(
 			{
@@ -657,29 +672,19 @@ describe("Plugin integration tests", () => {
 			"oldFolder",
 		);
 
-		assert.deepEqual(
-			plugin.getFilePathToId(),
-			new Map([["newFolder/file.md", 1]]),
-		);
-		assert.deepEqual(
-			plugin.getFileIdToFile(),
-			new Map([
-				[
-					1,
-					{
-						content: "test",
-						createdAt: now,
-						diskPath: "",
-						hash: "",
-						id: 1,
-						mimeType: "",
-						updatedAt: now,
-						workspaceId: 1,
-						workspacePath: "newFolder/file.md",
-					},
-				],
-			]),
-		);
+		assert.deepEqual(plugin.cacheDump(), [
+			{
+				content: "test",
+				createdAt: now,
+				diskPath: "",
+				hash: "",
+				id: 1,
+				mimeType: "",
+				updatedAt: now,
+				workspaceId: 1,
+				workspacePath: "newFolder/file.md",
+			},
+		]);
 		assert.strictEqual(renameFile.mock.callCount(), 1);
 		assert.deepEqual(renameFile.mock.calls[0].arguments, [
 			1,
@@ -721,10 +726,19 @@ describe("Plugin integration tests", () => {
 			parent: null,
 		});
 
-		assert.deepEqual(
-			plugin.getFilePathToId(),
-			new Map([["files/modifiedByWs.md", 1]]),
-		);
+		assert.deepEqual(plugin.cacheDump(), [
+			{
+				id: 1,
+				workspacePath: "files/modifiedByWs.md",
+				diskPath: "",
+				hash: "",
+				createdAt: now,
+				updatedAt: now,
+				mimeType: "",
+				workspaceId: 1,
+				content: "lorem ipsum",
+			},
+		]);
 
 		await plugin.onChunkMessage({
 			type: MessageType.Chunk,
@@ -732,10 +746,20 @@ describe("Plugin integration tests", () => {
 			chunks: computeDiff("lorem ipsum", "lorem bar ipsum"),
 		});
 
-		assert.deepEqual(
-			plugin.getFileIdToFile().get(1)?.content,
-			"lorem bar ipsum",
-		);
+		assert.deepEqual(plugin.cacheDump(), [
+			{
+				id: 1,
+				workspacePath: "files/modifiedByWs.md",
+				diskPath: "",
+				hash: "",
+				createdAt: now,
+				updatedAt: now,
+				mimeType: "",
+				workspaceId: 1,
+				content: "lorem bar ipsum",
+			},
+		]);
+
 		assert.strictEqual(createFile.mock.callCount(), 1);
 	});
 });

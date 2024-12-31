@@ -1,5 +1,5 @@
 import type { TAbstractFile } from "obsidian";
-import type { ApiClient, FileWithContent } from "./api/api";
+import type { ApiClient } from "./api/api";
 import { computeDiff, Operation } from "./diff";
 import type { Disk } from "./storage/storage";
 import {
@@ -12,6 +12,7 @@ import path from "path-browserify";
 import { log } from "src/logger/logger";
 import { isTextFile } from "./utils/mime";
 import { isText } from "./storage/filetype";
+import { FileCache } from "./cache";
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -24,8 +25,7 @@ export interface Events {
 
 export class Syncinator {
 	private storage: Disk;
-	private filePathToId: Map<string, number> = new Map();
-	private fileIdToFile: Map<number, FileWithContent> = new Map();
+	private fileCache: FileCache = new FileCache();
 	private apiClient: ApiClient;
 	private wsClient: WsClient;
 	events: Events;
@@ -66,7 +66,7 @@ export class Syncinator {
 		const files = await this.storage.listFiles();
 
 		for (const file of files) {
-			if (this.filePathToId.has(file.path)) {
+			if (this.fileCache.hasByPath(file.path)) {
 				// TODO: we should check local changes
 				continue;
 			}
@@ -81,11 +81,7 @@ export class Syncinator {
 				file.path,
 				currentContent,
 			);
-			this.filePathToId.set(fileApi.workspacePath, fileApi.id);
-			this.fileIdToFile.set(fileApi.id, {
-				...fileApi,
-				content: currentContent,
-			});
+			this.fileCache.create({ ...fileApi, content: currentContent })
 
 			const msg: EventMessage = {
 				type: MessageType.Create,
@@ -95,25 +91,17 @@ export class Syncinator {
 			};
 			this.wsClient.sendMessage(msg);
 		}
-
-		// this.filePathToId.set(fileApi.workspacePath, fileApi.id);
-		// this.fileIdToFile.set(fileApi.id, {
-		// 	...fileApi,
-		// 	content: "",
-		// });
-		// this.storage.writeObject(fileApi.workspacePath, fileApi.content);
 	}
 
 	async fetchRemoteFiles() {
 		const files = await this.apiClient.fetchFiles();
 
-		log.debug(`fetched ${this.filePathToId.size} files from remote`, files);
+		log.debug(`fetched ${files.length} files from remote`, files);
 		for (const file of files) {
-			this.filePathToId.set(file.workspacePath, file.id);
-
 			const exists = await this.storage.exists(file.workspacePath);
 			const fileWithContent = await this.apiClient.fetchFile(file.id);
 
+			this.fileCache.create(fileWithContent)
 			if (!exists) {
 				await this.storage.writeObject(
 					file.workspacePath,
@@ -137,6 +125,10 @@ export class Syncinator {
 						log.info(remoteFileMtime, localFileMtime);
 
 						if (remoteFileMtime >= localFileMtime) {
+							this.fileCache.setById(file.id, {
+								...file,
+								content: fileWithContent.content,
+							})
 							await this.storage.writeObject(
 								file.workspacePath,
 								fileWithContent.content,
@@ -150,13 +142,12 @@ export class Syncinator {
 							diffs,
 						);
 						fileWithContent.content = content;
+						this.fileCache.setById(file.id, fileWithContent)
 					}
 				} else {
 					log.warn(`file ${fileWithContent.workspacePath} is not a text file`);
 				}
 			}
-
-			this.fileIdToFile.set(file.id, fileWithContent);
 		}
 	}
 
@@ -164,7 +155,7 @@ export class Syncinator {
 		log.debug("[socket] chunk", data);
 		const { fileId, chunks } = data;
 
-		const file = this.fileIdToFile.get(fileId);
+		const file = this.fileCache.getById(fileId);
 		if (file == null) {
 			log.error(`file '${fileId}' not found`);
 			return;
@@ -177,7 +168,7 @@ export class Syncinator {
 
 		file.content = content;
 
-		this.fileIdToFile.set(file.id, file);
+		this.fileCache.setById(file.id, file);
 	}
 
 	async onEventMessage(event: EventMessage) {
@@ -189,11 +180,7 @@ export class Syncinator {
 		if (event.type === MessageType.Create) {
 			if (event.objectType === "file") {
 				const fileApi = await this.apiClient.fetchFile(event.fileId);
-				this.filePathToId.set(fileApi.workspacePath, fileApi.id);
-				this.fileIdToFile.set(fileApi.id, {
-					...fileApi,
-					content: fileApi.content,
-				});
+				this.fileCache.create(fileApi)
 				this.storage.writeObject(fileApi.workspacePath, fileApi.content);
 			} else if (event.objectType === "folder") {
 				this.storage.writeObject(event.workspacePath, "", { isDir: true });
@@ -202,7 +189,7 @@ export class Syncinator {
 			}
 		} else if (event.type === MessageType.Delete) {
 			if (event.objectType === "file") {
-				const file = this.fileIdToFile.get(event.fileId);
+				const file = this.fileCache.getById(event.fileId);
 				if (!file) {
 					log.warn(
 						`[socket] cannot delete file ${event.fileId} as it is not present in current workspace`,
@@ -227,73 +214,50 @@ export class Syncinator {
 			}
 		} else if (event.type === MessageType.Rename) {
 			if (event.objectType === "file") {
-				const file = this.fileIdToFile.get(event.fileId);
+				const file = this.fileCache.getById(event.fileId);
 				if (!file) {
-					log.warn(
-						`[socket] cannot delete file ${event.fileId} as it is not present in current workspace`,
-					);
+					log.warn(`[socket] cannot rename file ${event.fileId}. Fetching from remote`);
+
+					const fileApi = await this.apiClient.fetchFile(event.fileId);
+					this.fileCache.create(fileApi)
+					await this.storage.writeObject(fileApi.workspacePath, fileApi.content)
+
 					return;
 				}
 
 				const fileApi = await this.apiClient.fetchFile(event.fileId);
 				const oldPath = file.workspacePath;
-				this.filePathToId.delete(oldPath);
-				this.filePathToId.set(fileApi.workspacePath, fileApi.id);
+				const newPath = fileApi.workspacePath;
+				this.fileCache.updatePath(file.id, newPath)
 
-				const updatedFile = this.fileIdToFile.get(fileApi.id);
-				if (updatedFile) {
-					updatedFile.workspacePath = fileApi.workspacePath;
-					this.fileIdToFile.set(fileApi.id, updatedFile);
-				} else {
-					log.error(
-						`[socket] file ${oldPath} to ${fileApi.workspacePath} not found`,
-					);
-				}
-
-				this.storage.rename(oldPath, fileApi.workspacePath);
+				this.storage.rename(oldPath, newPath);
 			} else if (event.objectType === "folder") {
 				const workspacePath = event.workspacePath + path.sep;
-				const files = await this.storage.listFiles({
-					prefix: workspacePath,
-				});
+				const files = await this.storage.listFiles({ prefix: workspacePath });
 				if (files.length === 0) {
 					log.error("[socket] trying to rename not existing folder");
 					return;
 				}
 
 				for (const file of files) {
-					const fileId = this.filePathToId.get(file.path);
-					if (!fileId) {
-						continue;
-					}
-					const fileDesc = this.fileIdToFile.get(fileId);
+					const fileDesc = this.fileCache.getByPath(file.path)
 					if (!fileDesc) {
 						continue;
 					}
 
-					const fileApi = await this.apiClient.fetchFile(fileId);
+					const fileApi = await this.apiClient.fetchFile(fileDesc.id);
 					const oldPath = fileDesc.workspacePath;
-					this.filePathToId.delete(oldPath);
-					this.filePathToId.set(fileApi.workspacePath, fileApi.id);
+					const newPath = fileApi.workspacePath;
 
-					const updatedFile = this.fileIdToFile.get(fileApi.id);
-					if (updatedFile) {
-						updatedFile.workspacePath = fileApi.workspacePath;
-						this.fileIdToFile.set(fileApi.id, updatedFile);
-					} else {
-						log.error(
-							`[socket] file ${oldPath} to ${fileApi.workspacePath} not found`,
-						);
+					if (oldPath !== newPath) {
+						this.fileCache.updatePath(fileDesc.id, newPath)
+						this.storage.rename(oldPath, fileApi.workspacePath);
 					}
-
-					this.storage.rename(oldPath, fileApi.workspacePath);
 				}
 
 				// give time to obsidian to update cache
 				for (let i = 0; i < 10; i++) {
-					const filesPostRename = await this.storage.listFiles({
-						prefix: workspacePath,
-					});
+					const filesPostRename = await this.storage.listFiles({ prefix: workspacePath });
 					if (filesPostRename.length === 0) {
 						this.storage.deleteObject(event.workspacePath);
 						break;
@@ -315,7 +279,7 @@ export class Syncinator {
 	// FIXME: avoid to trigger again create on ws event
 	private async create(file: TAbstractFile) {
 		log.debug("[event]: create", file);
-		if (this.filePathToId.has(file.path)) {
+		if (this.fileCache.hasByPath(file.path)) {
 			return;
 		}
 
@@ -342,11 +306,7 @@ export class Syncinator {
 				file.path,
 				currentContent,
 			);
-			this.filePathToId.set(fileApi.workspacePath, fileApi.id);
-			this.fileIdToFile.set(fileApi.id, {
-				...fileApi,
-				content: currentContent,
-			});
+			this.fileCache.create({ ...fileApi, content: currentContent })
 
 			const msg: EventMessage = {
 				type: MessageType.Create,
@@ -362,17 +322,12 @@ export class Syncinator {
 
 	private async modify(file: TAbstractFile) {
 		log.debug("[event]: modify", file);
-		const fileId = this.filePathToId.get(file.path);
-		if (fileId == null) {
-			log.error(`file '${file.path}' not found`);
-			return;
-		}
-
-		const currentFile = this.fileIdToFile.get(fileId);
+		const currentFile = this.fileCache.getByPath(file.path);
 		if (currentFile == null) {
 			log.error(`file '${file.path}' not found`);
 			return;
 		}
+		const fileId = currentFile.id
 
 		if (
 			!isTextFile(currentFile.mimeType) ||
@@ -386,14 +341,14 @@ export class Syncinator {
 
 		const oldContent = currentFile.content;
 		currentFile.content = newContent;
-		this.fileIdToFile.set(fileId, currentFile);
+		this.fileCache.setById(fileId, currentFile);
 
 		if (chunks.length > 0) {
 			log.info("modify", { fileId, chunks, oldContent, newContent });
 
 			const msg: ChunkMessage = {
 				type: MessageType.Chunk,
-				fileId: fileId,
+				fileId,
 				chunks,
 			};
 			this.wsClient.sendMessage(msg);
@@ -407,8 +362,7 @@ export class Syncinator {
 		const deleteFile = async (fileId: number) => {
 			try {
 				await this.apiClient.deleteFile(fileId);
-				this.fileIdToFile.delete(fileId);
-				this.filePathToId.delete(file.path);
+				this.fileCache.deleteById(fileId)
 
 				const msg: EventMessage = {
 					type: MessageType.Delete,
@@ -422,17 +376,16 @@ export class Syncinator {
 			}
 		};
 
-		const fileId = this.filePathToId.get(file.path);
-		if (!fileId) {
+		const fileToDelete = this.fileCache.getByPath(file.path);
+		if (fileToDelete === undefined) {
 			log.error(`missing file for deletion: "${file.path}", probably a folder`);
 
-			for (const [filePath, fileId] of this.filePathToId.entries()) {
-				if (filePath.startsWith(file.path + path.sep)) {
-					this.filePathToId.delete(filePath);
-					this.fileIdToFile.delete(fileId);
-					await deleteFile(fileId);
-				}
+			const files = this.fileCache.find((f) => f.workspacePath.startsWith(file.path + path.sep))
+			for (const fileToDelete of files) {
+				this.fileCache.deleteById(fileToDelete.id)
+				await deleteFile(fileToDelete.id);
 			}
+
 
 			const msg: EventMessage = {
 				type: MessageType.Delete,
@@ -444,14 +397,14 @@ export class Syncinator {
 			return;
 		}
 
-		await deleteFile(fileId);
+		await deleteFile(fileToDelete.id);
 	}
 
 	// FIXME: avoid to trigger again rename on ws event
 	private async rename(file: TAbstractFile, oldPath: string) {
 		log.debug("[event]: rename", oldPath, file);
-		const fileId = this.filePathToId.get(oldPath);
-		if (!fileId) {
+		const fileToRename = this.fileCache.getByPath(oldPath)
+		if (fileToRename === undefined) {
 			log.error(`missing file for rename: "${oldPath}", probably a folder`);
 
 			const oldWorkspacePath = oldPath + path.sep;
@@ -464,11 +417,7 @@ export class Syncinator {
 			}
 
 			for (const folderFile of folderFiles) {
-				const fileId = this.filePathToId.get(folderFile.path);
-				if (!fileId) {
-					continue;
-				}
-				const fileDesc = this.fileIdToFile.get(fileId);
+				const fileDesc = this.fileCache.getByPath(folderFile.path);
 				if (!fileDesc) {
 					continue;
 				}
@@ -478,22 +427,12 @@ export class Syncinator {
 				const newFilePath = oldFilePath.replace(oldPath, file.path);
 
 				try {
-					await this.apiClient.updateFile(fileId, newFilePath);
+					await this.apiClient.updateFile(fileDesc.id, newFilePath);
 				} catch (error) {
 					log.error(error);
 				}
 
-				this.filePathToId.delete(oldFilePath);
-				this.filePathToId.set(newFilePath, fileId);
-
-				const updatedFile = this.fileIdToFile.get(fileId);
-				if (updatedFile) {
-					updatedFile.workspacePath = newFilePath;
-					this.fileIdToFile.set(fileId, updatedFile);
-				} else {
-					log.error(`[socket] file ${oldFilePath} to ${newFilePath} not found`);
-				}
-
+				this.fileCache.updatePath(fileDesc.id, newFilePath)
 				this.storage.rename(oldFilePath, newFilePath);
 			}
 
@@ -521,23 +460,13 @@ export class Syncinator {
 		}
 
 		try {
-			await this.apiClient.updateFile(fileId, file.path);
-
-			this.filePathToId.delete(oldPath);
-			this.filePathToId.set(file.path, fileId);
-
-			const updatedFile = this.fileIdToFile.get(fileId);
-			if (updatedFile) {
-				updatedFile.workspacePath = file.path;
-				this.fileIdToFile.set(fileId, updatedFile);
-			} else {
-				log.error(`file ${oldPath} to ${file.path} not found`);
-			}
+			await this.apiClient.updateFile(fileToRename.id, file.path);
+			this.fileCache.updatePath(fileToRename.id, file.path)
 
 			// First we create the file so the other clients can fetch it on event
 			const msg: EventMessage = {
 				type: MessageType.Rename,
-				fileId: fileId,
+				fileId: fileToRename.id,
 				objectType: "file",
 				workspacePath: oldPath,
 			};
@@ -548,11 +477,7 @@ export class Syncinator {
 		}
 	}
 
-	getFilePathToId(): Map<string, number> {
-		return new Map(this.filePathToId);
-	}
-
-	getFileIdToFile(): Map<number, FileWithContent> {
-		return new Map(this.fileIdToFile);
+	cacheDump() {
+		return this.fileCache.dump()
 	}
 }
