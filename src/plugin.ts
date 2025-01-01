@@ -113,7 +113,6 @@ export class Syncinator {
 					typeof fileWithContent.content !== "string"
 				) {
 					// TODO: it should check for binary files that changed with same workspacePath
-					log.warn(`file ${fileWithContent.workspacePath} is not a text file`);
 					continue;
 				}
 
