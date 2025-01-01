@@ -17,3 +17,4 @@ To test this plugin:
 - Add sync for configurations
 	- Add also a settings page to decide what to sync
 - Fix consistency on startup, to align local offline changes
+- Add cursor of other clients
