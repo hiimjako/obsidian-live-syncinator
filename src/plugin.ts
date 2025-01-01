@@ -67,7 +67,6 @@ export class Syncinator {
 
 		for (const file of files) {
 			if (this.fileCache.hasByPath(file.path)) {
-				// TODO: we should check local changes
 				continue;
 			}
 
@@ -93,6 +92,9 @@ export class Syncinator {
 		}
 	}
 
+	/**
+	 * Publish to the server the local unsynchronized files
+	 */
 	async fetchRemoteFiles() {
 		const files = await this.apiClient.fetchFiles();
 
