@@ -80,7 +80,7 @@ export class Syncinator {
 				file.path,
 				currentContent,
 			);
-			this.fileCache.create({ ...fileApi, content: currentContent })
+			this.fileCache.create({ ...fileApi, content: currentContent });
 
 			const msg: EventMessage = {
 				type: MessageType.Create,
@@ -103,51 +103,52 @@ export class Syncinator {
 			const exists = await this.storage.exists(file.workspacePath);
 			const fileWithContent = await this.apiClient.fetchFile(file.id);
 
-			this.fileCache.create(fileWithContent)
+			this.fileCache.create(fileWithContent);
 			if (!exists) {
-				await this.storage.write(
-					file.workspacePath,
-					fileWithContent.content,
-				);
+				await this.storage.write(file.workspacePath, fileWithContent.content);
 			} else {
-				if (typeof fileWithContent.content === "string") {
-					const currentContent = await this.storage.readText(
-						file.workspacePath,
-					);
-					const diffs = computeDiff(currentContent, fileWithContent.content);
-
-					if (diffs.some((diff) => diff.type === Operation.DiffRemove)) {
-						// FIXME: in case we have deletion we should handle it, maybe asking to the
-						// user?
-						// For now we just let win the most recent version
-						const stat = await this.storage.stat(file.workspacePath);
-						const localFileMtime = new Date(stat?.mtime ?? 0);
-						const remoteFileMtime = new Date(fileWithContent.updatedAt);
-
-						log.info(remoteFileMtime, localFileMtime);
-
-						if (remoteFileMtime >= localFileMtime) {
-							this.fileCache.setById(file.id, {
-								...file,
-								content: fileWithContent.content,
-							})
-							await this.storage.write(
-								file.workspacePath,
-								fileWithContent.content,
-								{ force: true },
-							);
-						}
-					} else {
-						// in case of only add we can safely add the text to the local version
-						const content = await this.storage.persistChunks(
-							file.workspacePath,
-							diffs,
-						);
-						fileWithContent.content = content;
-						this.fileCache.setById(file.id, fileWithContent)
-					}
-				} else {
+				// Conflict
+				if (
+					!isText(file.workspacePath) ||
+					typeof fileWithContent.content !== "string"
+				) {
+					// TODO: it should check for binary files that changed with same workspacePath
 					log.warn(`file ${fileWithContent.workspacePath} is not a text file`);
+					continue;
+				}
+
+				const localContent = await this.storage.readText(file.workspacePath);
+				// target is local content
+				const chunks = computeDiff(fileWithContent.content, localContent);
+				if (chunks.length === 0) {
+					continue;
+				}
+
+				const stat = await this.storage.stat(file.workspacePath);
+				const localFileMtime = new Date(stat?.mtime ?? stat?.ctime ?? 0);
+				const remoteFileMtime = new Date(fileWithContent.updatedAt);
+				if (remoteFileMtime >= localFileMtime) {
+					this.fileCache.setById(file.id, {
+						...file,
+						content: fileWithContent.content,
+					});
+					await this.storage.write(
+						file.workspacePath,
+						fileWithContent.content,
+						{ force: true },
+					);
+				} else {
+					this.fileCache.setById(file.id, {
+						...file,
+						updatedAt: new Date(stat?.mtime ?? "").toISOString(),
+						content: localContent,
+					});
+					const msg: ChunkMessage = {
+						type: MessageType.Chunk,
+						fileId: fileWithContent.id,
+						chunks,
+					};
+					this.wsClient.sendMessage(msg);
 				}
 			}
 		}
@@ -182,7 +183,7 @@ export class Syncinator {
 		if (event.type === MessageType.Create) {
 			if (event.objectType === "file") {
 				const fileApi = await this.apiClient.fetchFile(event.fileId);
-				this.fileCache.create(fileApi)
+				this.fileCache.create(fileApi);
 				this.storage.write(fileApi.workspacePath, fileApi.content);
 			} else if (event.objectType === "folder") {
 				this.storage.write(event.workspacePath, "", { isDir: true });
@@ -218,11 +219,13 @@ export class Syncinator {
 			if (event.objectType === "file") {
 				const file = this.fileCache.getById(event.fileId);
 				if (!file) {
-					log.warn(`[socket] cannot rename file ${event.fileId}. Fetching from remote`);
+					log.warn(
+						`[socket] cannot rename file ${event.fileId}. Fetching from remote`,
+					);
 
 					const fileApi = await this.apiClient.fetchFile(event.fileId);
-					this.fileCache.create(fileApi)
-					await this.storage.write(fileApi.workspacePath, fileApi.content)
+					this.fileCache.create(fileApi);
+					await this.storage.write(fileApi.workspacePath, fileApi.content);
 
 					return;
 				}
@@ -230,7 +233,7 @@ export class Syncinator {
 				const fileApi = await this.apiClient.fetchFile(event.fileId);
 				const oldPath = file.workspacePath;
 				const newPath = fileApi.workspacePath;
-				this.fileCache.updatePath(file.id, newPath)
+				this.fileCache.updatePath(file.id, newPath);
 
 				this.storage.rename(oldPath, newPath);
 			} else if (event.objectType === "folder") {
@@ -242,7 +245,7 @@ export class Syncinator {
 				}
 
 				for (const file of files) {
-					const fileDesc = this.fileCache.getByPath(file.path)
+					const fileDesc = this.fileCache.getByPath(file.path);
 					if (!fileDesc) {
 						continue;
 					}
@@ -252,14 +255,16 @@ export class Syncinator {
 					const newPath = fileApi.workspacePath;
 
 					if (oldPath !== newPath) {
-						this.fileCache.updatePath(fileDesc.id, newPath)
+						this.fileCache.updatePath(fileDesc.id, newPath);
 						this.storage.rename(oldPath, fileApi.workspacePath);
 					}
 				}
 
 				// give time to obsidian to update cache
 				for (let i = 0; i < 10; i++) {
-					const filesPostRename = await this.storage.listFiles({ prefix: workspacePath });
+					const filesPostRename = await this.storage.listFiles({
+						prefix: workspacePath,
+					});
 					if (filesPostRename.length === 0) {
 						this.storage.delete(event.workspacePath);
 						break;
@@ -308,7 +313,7 @@ export class Syncinator {
 				file.path,
 				currentContent,
 			);
-			this.fileCache.create({ ...fileApi, content: currentContent })
+			this.fileCache.create({ ...fileApi, content: currentContent });
 
 			const msg: EventMessage = {
 				type: MessageType.Create,
@@ -329,7 +334,7 @@ export class Syncinator {
 			log.error(`file '${file.path}' not found`);
 			return;
 		}
-		const fileId = currentFile.id
+		const fileId = currentFile.id;
 
 		if (
 			!isTextFile(currentFile.mimeType) ||
@@ -364,7 +369,7 @@ export class Syncinator {
 		const deleteFile = async (fileId: number) => {
 			try {
 				await this.apiClient.deleteFile(fileId);
-				this.fileCache.deleteById(fileId)
+				this.fileCache.deleteById(fileId);
 
 				const msg: EventMessage = {
 					type: MessageType.Delete,
@@ -382,12 +387,13 @@ export class Syncinator {
 		if (fileToDelete === undefined) {
 			log.error(`missing file for deletion: "${file.path}", probably a folder`);
 
-			const files = this.fileCache.find((f) => f.workspacePath.startsWith(file.path + path.sep))
+			const files = this.fileCache.find((f) =>
+				f.workspacePath.startsWith(file.path + path.sep),
+			);
 			for (const fileToDelete of files) {
-				this.fileCache.deleteById(fileToDelete.id)
+				this.fileCache.deleteById(fileToDelete.id);
 				await deleteFile(fileToDelete.id);
 			}
-
 
 			const msg: EventMessage = {
 				type: MessageType.Delete,
@@ -405,7 +411,7 @@ export class Syncinator {
 	// FIXME: avoid to trigger again rename on ws event
 	private async rename(file: TAbstractFile, oldPath: string) {
 		log.debug("[event]: rename", oldPath, file);
-		const fileToRename = this.fileCache.getByPath(oldPath)
+		const fileToRename = this.fileCache.getByPath(oldPath);
 		if (fileToRename === undefined) {
 			log.error(`missing file for rename: "${oldPath}", probably a folder`);
 
@@ -434,7 +440,7 @@ export class Syncinator {
 					log.error(error);
 				}
 
-				this.fileCache.updatePath(fileDesc.id, newFilePath)
+				this.fileCache.updatePath(fileDesc.id, newFilePath);
 				this.storage.rename(oldFilePath, newFilePath);
 			}
 
@@ -463,7 +469,7 @@ export class Syncinator {
 
 		try {
 			await this.apiClient.updateFile(fileToRename.id, file.path);
-			this.fileCache.updatePath(fileToRename.id, file.path)
+			this.fileCache.updatePath(fileToRename.id, file.path);
 
 			// First we create the file so the other clients can fetch it on event
 			const msg: EventMessage = {
@@ -480,6 +486,6 @@ export class Syncinator {
 	}
 
 	cacheDump() {
-		return this.fileCache.dump()
+		return this.fileCache.dump();
 	}
 }

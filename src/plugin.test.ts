@@ -41,7 +41,7 @@ describe("Plugin integration tests", () => {
 		test("should fetch missing files", async (t) => {
 			const oldTimeDate = new Date();
 			oldTimeDate.setDate(oldTimeDate.getDate() - 1);
-			const oldTime = oldTimeDate.toString();
+			const oldTime = oldTimeDate.toISOString();
 
 			const fetchFiles = t.mock.method(apiClient, "fetchFiles", (): File[] => {
 				return [
@@ -106,9 +106,6 @@ describe("Plugin integration tests", () => {
 				},
 			);
 
-			// inizializing a file in vault, to simulate misalignment
-			storage.write("files/alreadyInWorkspace.md", "lorem baz");
-
 			await plugin.init();
 
 			assert.deepEqual(plugin.cacheDump(), [
@@ -135,6 +132,7 @@ describe("Plugin integration tests", () => {
 					workspacePath: "files/alreadyInWorkspace.md",
 				},
 			]);
+
 			assert.strictEqual(fetchFiles.mock.callCount(), 1);
 			assert.strictEqual(fetchFile1.mock.callCount(), 1);
 			assert.strictEqual(fetchFile2.mock.callCount(), 1);
@@ -143,8 +141,8 @@ describe("Plugin integration tests", () => {
 		test("should post files not in remote", async (t) => {
 			const oldTimeDate = new Date();
 			oldTimeDate.setDate(oldTimeDate.getDate() - 1);
-			const oldTime = oldTimeDate.toString();
-			const creationTime = new Date().toString();
+			const oldTime = oldTimeDate.toISOString();
+			const creationTime = new Date().toISOString();
 
 			const sendMessage = t.mock.method(wsClient, "sendMessage", () => { });
 			const fetchFiles = t.mock.method(apiClient, "fetchFiles", (): File[] => {
@@ -195,8 +193,7 @@ describe("Plugin integration tests", () => {
 			});
 
 			// inizializing a file in vault, to simulate misalignment
-			storage.write("files/alreadyInRemote.md", "lorem bar");
-			storage.write("files/localOnly.md", "lorem foo");
+			await storage.write("files/localOnly.md", "lorem foo");
 
 			await plugin.init();
 
@@ -229,10 +226,119 @@ describe("Plugin integration tests", () => {
 			assert.strictEqual(createFile.mock.callCount(), 1);
 			assert.strictEqual(sendMessage.mock.callCount(), 1);
 		});
+
+		test("should align local changes with remote one", async (t) => {
+			const oldTimeDate = new Date();
+			oldTimeDate.setDate(oldTimeDate.getDate() - 1);
+			const oldTime = oldTimeDate.toISOString()
+
+			const recentTimeDate = new Date();
+			recentTimeDate.setDate(recentTimeDate.getDate() + 1);
+			const recentTime = recentTimeDate.toISOString()
+
+			const sendMessage = t.mock.method(wsClient, "sendMessage", () => { });
+			const fetchFiles = t.mock.method(apiClient, "fetchFiles", (): File[] => {
+				return [
+					{
+						id: 1,
+						workspacePath: "files/remoteIsRecent.md",
+						diskPath: "",
+						hash: "",
+						createdAt: recentTime,
+						updatedAt: recentTime,
+						mimeType: "",
+						workspaceId: 1,
+					},
+					{
+						id: 2,
+						workspacePath: "files/localIsRecent.md",
+						diskPath: "",
+						hash: "",
+						createdAt: oldTime,
+						updatedAt: oldTime,
+						mimeType: "",
+						workspaceId: 1,
+					},
+
+				];
+			});
+
+			const fetchFile2 = t.mock.method(
+				apiClient,
+				"fetchFile",
+				(): FileWithContent => ({
+					id: 2,
+					workspacePath: "files/localIsRecent.md",
+					content: "remote is recent",
+					diskPath: "",
+					hash: "",
+					createdAt: oldTime,
+					updatedAt: oldTime,
+					mimeType: "",
+					workspaceId: 1,
+				}),
+				{ times: 1 },
+			);
+
+			const fetchFile = t.mock.method(
+				apiClient,
+				"fetchFile",
+				(): FileWithContent => ({
+					id: 1,
+					workspacePath: "files/remoteIsRecent.md",
+					content: "remote is recent",
+					diskPath: "",
+					hash: "",
+					createdAt: recentTime,
+					updatedAt: recentTime,
+					mimeType: "",
+					workspaceId: 1,
+				}),
+				{ times: 1 },
+			);
+
+
+
+			// inizializing a file in vault, to simulate misalignment
+			await storage.write("files/remoteIsRecent.md", "local is recent");
+			await storage.write("files/localIsRecent.md", "local is recent");
+			const stat = await storage.stat("files/localIsRecent.md")
+
+			await plugin.init();
+
+			assert.deepEqual(plugin.cacheDump(), [
+				{
+					content: "remote is recent",
+					createdAt: recentTime,
+					updatedAt: recentTime,
+					diskPath: "",
+					hash: "",
+					id: 1,
+					mimeType: "",
+					workspaceId: 1,
+					workspacePath: "files/remoteIsRecent.md",
+				},
+				{
+					content: "local is recent",
+					createdAt: oldTime,
+					updatedAt: new Date(stat?.mtime ?? "").toISOString(),
+					diskPath: "",
+					hash: "",
+					id: 2,
+					mimeType: "",
+					workspaceId: 1,
+					workspacePath: "files/localIsRecent.md",
+				},
+			]);
+			assert.strictEqual(fetchFiles.mock.callCount(), 1);
+			assert.strictEqual(fetchFile.mock.callCount(), 1);
+			assert.strictEqual(fetchFile2.mock.callCount(), 1);
+			assert.strictEqual(sendMessage.mock.callCount(), 1);
+		});
 	});
 
 	test("should create a file on obsidian event 'create'", async (t) => {
-		const now = new Date().toString();
+		const now = new Date().toISOString();
 		const createFile = t.mock.method(apiClient, "createFile", (): File => {
 			return {
 				id: 1,
@@ -287,7 +393,7 @@ describe("Plugin integration tests", () => {
 	});
 
 	test("should delete a file on obsidian event 'delete'", async (t) => {
-		const now = new Date().toString();
+		const now = new Date().toISOString();
 		const deleteFile = t.mock.method(apiClient, "deleteFile", () => { });
 		const createFile = t.mock.method(apiClient, "createFile", (): File => {
 			return {
@@ -347,7 +453,7 @@ describe("Plugin integration tests", () => {
 	});
 
 	test("should delete a folder on obsidian event 'delete'", async (t) => {
-		const now = new Date().toString();
+		const now = new Date().toISOString();
 		const deleteFile = t.mock.method(apiClient, "deleteFile", () => { });
 		const createFile = t.mock.method(
 			apiClient,
@@ -434,8 +540,8 @@ describe("Plugin integration tests", () => {
 				workspacePath: "files.md",
 				diskPath: "",
 				hash: "",
-				createdAt: new Date().toString(),
-				updatedAt: new Date().toString(),
+				createdAt: now,
+				updatedAt: now,
 				mimeType: "",
 				workspaceId: 1,
 				content: "test",
@@ -445,8 +551,8 @@ describe("Plugin integration tests", () => {
 				workspacePath: "files/newFile.md",
 				diskPath: "",
 				hash: "",
-				createdAt: new Date().toString(),
-				updatedAt: new Date().toString(),
+				createdAt: now,
+				updatedAt: now,
 				mimeType: "",
 				workspaceId: 1,
 				content: "test",
@@ -456,8 +562,8 @@ describe("Plugin integration tests", () => {
 				workspacePath: "files/anotherFile.md",
 				diskPath: "",
 				hash: "",
-				createdAt: new Date().toString(),
-				updatedAt: new Date().toString(),
+				createdAt: now,
+				updatedAt: now,
 				mimeType: "",
 				workspaceId: 1,
 				content: "test",
@@ -477,8 +583,8 @@ describe("Plugin integration tests", () => {
 				workspacePath: "files.md",
 				diskPath: "",
 				hash: "",
-				createdAt: new Date().toString(),
-				updatedAt: new Date().toString(),
+				createdAt: now,
+				updatedAt: now,
 				mimeType: "",
 				workspaceId: 1,
 				content: "test",
@@ -518,7 +624,7 @@ describe("Plugin integration tests", () => {
 	});
 
 	test("should rename a file on obsidian event 'rename'", async (t) => {
-		const now = new Date().toString();
+		const now = new Date().toISOString();
 		const renameFile = t.mock.method(apiClient, "updateFile", () => { });
 		const createOldFile = t.mock.method(
 			apiClient,
@@ -602,7 +708,7 @@ describe("Plugin integration tests", () => {
 	});
 
 	test("should rename a folder on obsidian event 'rename'", async (t) => {
-		const now = new Date().toString();
+		const now = new Date().toISOString();
 		const createOldFile = t.mock.method(
 			apiClient,
 			"createFile",
@@ -704,7 +810,7 @@ describe("Plugin integration tests", () => {
 	});
 
 	test("should write a new chunk coming from ws", async (t) => {
-		const now = new Date().toString();
+		const now = new Date().toISOString();
 		const createFile = t.mock.method(apiClient, "createFile", (): File => {
 			return {
 				id: 1,
