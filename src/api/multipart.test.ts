@@ -1,11 +1,13 @@
 import { describe, test } from "node:test";
 import assert from "node:assert";
 import { Multipart } from "./multipart";
+import { base64ToArrayBuffer } from "./base64Utils";
 
 describe("Multipart", () => {
 	test("should create multipart", () => {
 		const multipart = new Multipart()
 			.createFormField("field", "foo")
+			.createFormFile("image", "image.png", base64ToArrayBuffer("ZHVtbXk="))
 			.createFormFile("file", "file.md", "content");
 
 		const output = multipart.build();
@@ -18,9 +20,14 @@ Content-Disposition: form-data; name="field"\r
 \r
 foo\r
 --${multipart.boundary}\r
-Content-Disposition: form-data; name="file"; filename="file.md"\r
+Content-Disposition: form-data; name="image"; filename="image.png"\r
 Content-Type: application/octet-stream\r
 Content-Transfer-Encoding: base64\r
+\r
+ZHVtbXk=\r
+--${multipart.boundary}\r
+Content-Disposition: form-data; name="file"; filename="file.md"\r
+Content-Type: application/octet-stream\r
 \r
 content\r
 --${multipart.boundary}--\r\n`,

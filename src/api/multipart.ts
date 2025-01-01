@@ -9,6 +9,7 @@ type FormFile = {
 	name: string;
 	filename: string;
 	value: string | ArrayBuffer;
+	isBase64?: boolean;
 };
 
 export class Multipart {
@@ -37,9 +38,11 @@ export class Multipart {
 		filename: string,
 		value: string | ArrayBuffer,
 	): Multipart {
+		let isBase64 = false;
 		let stringValue: string;
 		if (value instanceof ArrayBuffer) {
 			stringValue = arrayBufferToBase64(value);
+			isBase64 = true;
 		} else {
 			stringValue = value;
 		}
@@ -47,6 +50,7 @@ export class Multipart {
 			name: fieldname,
 			filename,
 			value: stringValue,
+			isBase64,
 		});
 
 		return this;
@@ -79,8 +83,14 @@ export class Multipart {
 			body += `--${this._boundary}\r\n`;
 			body += `Content-Disposition: form-data; name="${file.name}"; filename="${file.filename}"\r\n`;
 			body += "Content-Type: application/octet-stream\r\n";
-			body += "Content-Transfer-Encoding: base64\r\n\r\n";
+			if (file.isBase64) {
+				body += "Content-Transfer-Encoding: base64\r\n";
+			}
+			body += "\r\n";
 			body += file.value;
+			if (i !== this._files.length - 1) {
+				body += "\r\n";
+			}
 		}
 
 		body += `\r\n--${this._boundary}--\r\n`;
