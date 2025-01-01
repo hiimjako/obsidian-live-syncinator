@@ -24,10 +24,7 @@ describe("Plugin integration tests", () => {
 		storage = new Disk(vault);
 		const httpClient = new HttpClient("http", "localhost", {});
 		apiClient = new ApiClient(httpClient);
-		wsClient = new WsClient("ws", "localhost");
-
-		// to remove logs on tests
-		test.mock.method(wsClient, "registerOnError", () => { });
+		wsClient = new WsClient("ws", "localhost", { maxReconnectAttempts: 0 });
 
 		plugin = new Syncinator(storage, apiClient, wsClient);
 	});
@@ -230,11 +227,11 @@ describe("Plugin integration tests", () => {
 		test("should align local changes with remote one", async (t) => {
 			const oldTimeDate = new Date();
 			oldTimeDate.setDate(oldTimeDate.getDate() - 1);
-			const oldTime = oldTimeDate.toISOString()
+			const oldTime = oldTimeDate.toISOString();
 
 			const recentTimeDate = new Date();
 			recentTimeDate.setDate(recentTimeDate.getDate() + 1);
-			const recentTime = recentTimeDate.toISOString()
+			const recentTime = recentTimeDate.toISOString();
 
 			const sendMessage = t.mock.method(wsClient, "sendMessage", () => { });
 			const fetchFiles = t.mock.method(apiClient, "fetchFiles", (): File[] => {
@@ -259,7 +256,6 @@ describe("Plugin integration tests", () => {
 						mimeType: "",
 						workspaceId: 1,
 					},
-
 				];
 			});
 
@@ -297,12 +293,10 @@ describe("Plugin integration tests", () => {
 				{ times: 1 },
 			);
 
-
-
 			// inizializing a file in vault, to simulate misalignment
 			await storage.write("files/remoteIsRecent.md", "local is recent");
 			await storage.write("files/localIsRecent.md", "local is recent");
-			const stat = await storage.stat("files/localIsRecent.md")
+			const stat = await storage.stat("files/localIsRecent.md");
 
 			await plugin.init();
 

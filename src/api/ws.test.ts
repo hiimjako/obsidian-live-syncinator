@@ -3,7 +3,7 @@ import assert from "node:assert";
 import WebSocket from "ws";
 import { MessageType, WsClient } from "./ws";
 import getPort from "get-port";
-import type { ChunkMessage, EventMessage } from "./ws";
+import type { ChunkMessage } from "./ws";
 import { Operation } from "../diff";
 
 describe("WsClient with real WebSocket server", () => {
@@ -17,16 +17,19 @@ describe("WsClient with real WebSocket server", () => {
 		server = new WebSocket.Server({ port });
 		lastMessage = null;
 		lastError = null;
-		wsClient = new WsClient("ws", `127.0.0.1:${port}`);
-		wsClient.registerOnMessage(
-			async (msg: ChunkMessage) => {
-				lastMessage = msg;
-			},
-			async (_: EventMessage) => {},
-		);
-		wsClient.registerOnError(async (err: Event) => {
+		wsClient = new WsClient("ws", `127.0.0.1:${port}`, {
+			maxReconnectAttempts: 0,
+		});
+
+		wsClient.onError((err: Event) => {
 			lastError = err;
 		});
+
+		wsClient.onChunkMessage(async (msg: ChunkMessage) => {
+			lastMessage = msg;
+		});
+
+		wsClient.connect();
 	});
 
 	afterEach(() => {
@@ -79,7 +82,7 @@ describe("WsClient with real WebSocket server", () => {
 	});
 
 	test("should handle server error", (_, done) => {
-		server.on("connection", () => {});
+		server.on("connection", () => { });
 		server.close();
 
 		setTimeout(() => {

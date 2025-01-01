@@ -1,6 +1,6 @@
 import type { TAbstractFile } from "obsidian";
 import type { ApiClient } from "./api/api";
-import { computeDiff, Operation } from "./diff";
+import { computeDiff } from "./diff";
 import type { Disk } from "./storage/storage";
 import {
 	MessageType,
@@ -35,16 +35,9 @@ export class Syncinator {
 		this.apiClient = apiClient;
 		this.wsClient = wsClient;
 
-		this.wsClient.registerOnMessage(
-			this.onChunkMessage.bind(this),
-			this.onEventMessage.bind(this),
-		);
-		this.wsClient.registerOnError(this.onError.bind(this));
-		this.wsClient.registerOnClose(async (event) => {
-			if (!event.wasClean) {
-				log.error("WebSocket closed unexpectedly");
-			}
-		});
+		this.wsClient.onChunkMessage(this.onChunkMessage.bind(this));
+		this.wsClient.onEventMessage(this.onEventMessage.bind(this));
+		this.wsClient.connect();
 
 		this.events = {
 			create: this.create.bind(this),
@@ -276,10 +269,6 @@ export class Syncinator {
 		} else {
 			log.error(`[socket] unknown event ${event}`);
 		}
-	}
-
-	async onError(event: Event) {
-		log.error(event);
 	}
 
 	// FIXME: avoid to trigger again create on ws event

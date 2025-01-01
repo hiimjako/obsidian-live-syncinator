@@ -23,58 +23,132 @@ export interface EventMessage extends MessageHeader {
 	fetchFromRemote?: boolean;
 }
 
+type Options = {
+	maxReconnectAttempts?: number;
+	reconnectIntervalMs?: number;
+};
+
 export class WsClient {
 	private ws: WebSocket;
+	private url: string;
+	private isConnected = false;
+	private reconnectAttempts = 0;
+	private options: Options = {
+		maxReconnectAttempts: -1,
+		reconnectIntervalMs: 1000,
+	};
+	private onOpenHandler?: () => void;
+	private onCloseHandler?: () => void;
+	private onErrorHandler?: (e: globalThis.Event) => void;
+	private onChunkMessageHandler?: (_: ChunkMessage) => Promise<void>;
+	private onEventMessageHandler?: (_: EventMessage) => Promise<void>;
 
-	constructor(scheme: "ws" | "wss", domain: string) {
-		this.ws = new WebSocket(`${scheme}://${domain}/v1/sync`);
+	constructor(scheme: "ws" | "wss", domain: string, options: Options = {}) {
+		this.options = { ...this.options, ...options };
+		this.url = `${scheme}://${domain}/v1/sync`;
 	}
 
-	registerOnClose(fn: (_: CloseEvent) => Promise<void>) {
-		this.ws.addEventListener("close", fn);
+	onOpen(handler: () => void) {
+		this.onOpenHandler = handler;
 	}
 
-	registerOnError(fn: (_: Event) => Promise<void>) {
-		this.ws.addEventListener("error", fn);
+	onClose(handler: () => void) {
+		this.onCloseHandler = handler;
 	}
 
-	registerOnMessage(
-		chunkMessage: (_: ChunkMessage) => Promise<void>,
-		eventMessage: (_: EventMessage) => Promise<void>,
-	) {
-		this.ws.addEventListener(
-			"message",
-			async function message(event: MessageEvent<string>) {
-				try {
-					const msg: ChunkMessage | EventMessage = JSON.parse(
-						event.data.toString(),
-					);
+	onError(handler: (e: globalThis.Event) => void) {
+		this.onErrorHandler = handler;
+	}
 
-					switch (msg.type) {
-						case MessageType.Chunk:
-							await chunkMessage(msg as ChunkMessage);
-							break;
-						case MessageType.Create:
-						case MessageType.Delete:
-						case MessageType.Rename:
-							await eventMessage(msg as EventMessage);
-							break;
-						default:
-							log.info("message type:", msg.type, "not supported");
-					}
-				} catch (err) {
-					log.error(err);
+	onChunkMessage(handler: (_: ChunkMessage) => Promise<void>) {
+		this.onChunkMessageHandler = handler;
+	}
+
+	onEventMessage(handler: (_: EventMessage) => Promise<void>) {
+		this.onEventMessageHandler = handler;
+	}
+
+	connect() {
+		this.ws = new WebSocket(this.url);
+
+		this.ws.onopen = () => {
+			this.isConnected = true;
+			this.reconnectAttempts = 0;
+			if (this.onOpenHandler) this.onOpenHandler();
+		};
+
+		this.ws.onclose = (event) => {
+			if (!event.wasClean) {
+				log.error("WebSocket closed unexpectedly");
+			}
+			this.isConnected = false;
+			if (this.onCloseHandler) this.onCloseHandler();
+			this.reconnect();
+		};
+
+		this.ws.onerror = (error) => {
+			log.error("WebSocket error:", error);
+			if (this.onErrorHandler) this.onErrorHandler(error);
+			if (this.isConnected) {
+				this.close();
+			}
+		};
+
+		this.ws.onmessage = async (event: MessageEvent<string>) => {
+			try {
+				const msg: ChunkMessage | EventMessage = JSON.parse(
+					event.data.toString(),
+				);
+
+				switch (msg.type) {
+					case MessageType.Chunk:
+						if (this.onChunkMessageHandler) {
+							await this.onChunkMessageHandler(msg as ChunkMessage);
+						}
+						break;
+					case MessageType.Create:
+					case MessageType.Delete:
+					case MessageType.Rename:
+						if (this.onEventMessageHandler) {
+							await this.onEventMessageHandler(msg as EventMessage);
+						}
+						break;
+					default:
+						log.error("message type:", msg.type, "not supported");
 				}
-			},
-		);
+			} catch (err) {
+				log.error(err);
+			}
+		};
 	}
 
-	sendMessage(msg: ChunkMessage | EventMessage) {
-		const msgJson = JSON.stringify(msg);
-		this.ws.send(msgJson);
+	reconnect() {
+		const mra = this.options?.maxReconnectAttempts ?? -1;
+		const attempts = this.reconnectAttempts < mra || mra === -1;
+
+		if (attempts) {
+			setTimeout(() => {
+				log.info("Reconnecting ws...");
+				this.reconnectAttempts++;
+				this.connect();
+			}, this.options.reconnectIntervalMs);
+		} else {
+			log.error("WebSocket max reconnect attempts reached.");
+		}
 	}
 
 	close() {
+		this.isConnected = false
 		this.ws.close(1000);
+	}
+
+	sendMessage(msg: ChunkMessage | EventMessage) {
+		if (!this.isConnected) {
+			log.warn("WebSocket is not connected. Unable to send data.");
+			return;
+		}
+
+		const msgJson = JSON.stringify(msg);
+		this.ws.send(msgJson);
 	}
 }
