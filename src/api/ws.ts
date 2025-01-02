@@ -30,7 +30,9 @@ type Options = {
 
 export class WsClient {
 	private ws: WebSocket;
-	private url: string;
+	private domain = ""
+	private scheme: "ws" | "wss" = "ws"
+	private jwtToken: string;
 	private isConnected = false;
 	private reconnectAttempts = 0;
 	private options: Options = {
@@ -45,7 +47,15 @@ export class WsClient {
 
 	constructor(scheme: "ws" | "wss", domain: string, options: Options = {}) {
 		this.options = { ...this.options, ...options };
-		this.url = `${scheme}://${domain}/v1/sync`;
+		this.scheme = scheme
+		this.domain = domain
+	}
+
+	private url() {
+		if (this.jwtToken !== "") {
+			return `${this.scheme}://${this.domain}/v1/sync?jwt=${this.jwtToken}`;
+		}
+		return `${this.scheme}://${this.domain}/v1/sync`;
 	}
 
 	onOpen(handler: () => void) {
@@ -68,8 +78,12 @@ export class WsClient {
 		this.onEventMessageHandler = handler;
 	}
 
+	setAuthorization(token: string) {
+		this.jwtToken = token
+	}
+
 	connect() {
-		this.ws = new WebSocket(this.url);
+		this.ws = new WebSocket(this.url());
 
 		this.ws.onopen = () => {
 			this.isConnected = true;

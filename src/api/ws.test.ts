@@ -82,7 +82,7 @@ describe("WsClient with real WebSocket server", () => {
 	});
 
 	test("should handle server error", (_, done) => {
-		server.on("connection", () => { });
+		server.on("connection", () => {});
 		server.close();
 
 		setTimeout(() => {

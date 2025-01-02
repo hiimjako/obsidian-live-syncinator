@@ -138,21 +138,7 @@ export class ApiClient {
 		return res.data;
 	}
 
-	async refreshToken(name: string, password: string) {
-		const res = await this.login(name, password);
-		this.client.setAuthorizationHeader(res.token);
+	setAuthorizationHeader(token: string) {
+		this.client.setAuthorizationHeader(token);
 	}
-}
-
-function randomBoundary(): string {
-	let boundary =
-		Math.random().toString(36).substring(2) + Date.now().toString(36);
-
-	const specialChars = `()<>@,;:\\\"/[]?= `;
-
-	if (new RegExp(`[${specialChars}]`).test(boundary)) {
-		boundary = `"${boundary}"`;
-	}
-
-	return boundary;
 }

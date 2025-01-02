@@ -26,7 +26,7 @@ export default class Syncinator extends Plugin {
 		this.statusBar = this.addStatusBarItem();
 	}
 
-	async registerEvents() {
+	async registerPlugin() {
 		const plugin = new SyncinatorPlugin(
 			this.storage,
 			this.apiClient,
@@ -43,10 +43,12 @@ export default class Syncinator extends Plugin {
 
 	private async refreshToken() {
 		try {
-			await this.apiClient.refreshToken(
+			const res = await this.apiClient.login(
 				this.settings.workspaceName,
 				this.settings.workspacePass,
 			);
+			this.apiClient.setAuthorizationHeader(res.token);
+			this.wsClient.setAuthorization(res.token);
 		} catch (error) {
 			log.error(error);
 		}
@@ -59,6 +61,7 @@ export default class Syncinator extends Plugin {
 		log.setGlobalLevel(this.settings.logLevel);
 
 		// Init
+		this.storage = new Disk(this.app.vault);
 		const httpClient = new HttpClient(
 			this.settings.useTLS ? "https" : "http",
 			this.settings.domain,
@@ -69,16 +72,15 @@ export default class Syncinator extends Plugin {
 			this.settings.useTLS ? "wss" : "ws",
 			this.settings.domain,
 		);
-		this.storage = new Disk(this.app.vault);
 
-		this.refreshToken();
+		await this.refreshToken();
 		this.registerInterval(
 			window.setInterval(async () => await this.refreshToken(), 5 * 60 * 1000),
 		);
 
 		// Deferred startup
 		setTimeout(async () => {
-			await this.registerEvents();
+			await this.registerPlugin();
 			this.updateStatusBar();
 			new Notice("Obsidian Live Syncinator inizialized");
 		}, 2000);
