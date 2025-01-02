@@ -89,6 +89,7 @@ export class WsClient {
 			this.isConnected = true;
 			this.reconnectAttempts = 0;
 			if (this.onOpenHandler) this.onOpenHandler();
+			log.info("WebSocket connected")
 		};
 
 		this.ws.onclose = (event) => {
