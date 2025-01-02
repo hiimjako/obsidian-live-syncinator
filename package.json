@@ -18,7 +18,7 @@
 	"license": "MIT",
 	"devDependencies": {
 		"@types/diff": "^6.0.0",
-		"@types/node": "^22.8.7",
+		"@types/node": "^22.10.3",
 		"@types/path-browserify": "^1.0.3",
 		"@types/ws": "^8.5.13",
 		"@typescript-eslint/eslint-plugin": "^8.12.2",
