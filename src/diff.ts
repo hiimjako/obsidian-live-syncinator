@@ -1,8 +1,8 @@
 import { diffChars } from "diff";
 
 export enum Operation {
-	DiffRemove = -1,
-	DiffAdd = 1,
+	Remove = -1,
+	Add = 1,
 }
 
 export type DiffChunk = {
@@ -22,7 +22,7 @@ export function computeDiff(oldStr: string, newStr: string): DiffChunk[] {
 
 		if (change.added) {
 			diffs.push({
-				type: Operation.DiffAdd,
+				type: Operation.Add,
 				len: changeLength,
 				text: change.value,
 				position,
@@ -30,7 +30,7 @@ export function computeDiff(oldStr: string, newStr: string): DiffChunk[] {
 			position += changeLength;
 		} else if (change.removed) {
 			diffs.push({
-				type: Operation.DiffRemove,
+				type: Operation.Remove,
 				len: changeLength,
 				text: change.value,
 				position,
@@ -45,7 +45,7 @@ export function computeDiff(oldStr: string, newStr: string): DiffChunk[] {
 
 export function applyDiff(text: string, diff: DiffChunk): string {
 	switch (diff.type) {
-		case Operation.DiffAdd:
+		case Operation.Add:
 			if (text === "") {
 				return diff.text;
 			}
@@ -58,7 +58,7 @@ export function applyDiff(text: string, diff: DiffChunk): string {
 				text.slice(0, diff.position) + diff.text + text.slice(diff.position)
 			);
 
-		case Operation.DiffRemove:
+		case Operation.Remove:
 			if (text === "") {
 				return "";
 			}
@@ -74,4 +74,16 @@ export function applyDiff(text: string, diff: DiffChunk): string {
 		default:
 			throw new Error("Invalid operation type");
 	}
+}
+
+// it returns the invert of a diff
+export function invertDiff(diff: DiffChunk): DiffChunk {
+	const inverted: DiffChunk = {
+		type: diff.type === Operation.Add ? Operation.Remove : Operation.Add,
+		len: diff.len,
+		text: diff.text,
+		position: diff.position,
+	};
+
+	return inverted;
 }

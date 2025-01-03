@@ -135,9 +135,9 @@ export class Disk {
 
 	async persistChunk(vaultPath: string, chunk: DiffChunk): Promise<string> {
 		switch (chunk.type) {
-			case Operation.DiffAdd:
+			case Operation.Add:
 				return await this.addBytesToFile(vaultPath, chunk.position, chunk.text);
-			case Operation.DiffRemove:
+			case Operation.Remove:
 				return await this.removeBytesFromFile(
 					vaultPath,
 					chunk.position,

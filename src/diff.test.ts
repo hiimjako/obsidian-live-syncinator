@@ -1,6 +1,6 @@
 import { describe, test } from "node:test";
 import assert from "node:assert";
-import { applyDiff, computeDiff, Operation } from "./diff";
+import { applyDiff, computeDiff, invertDiff as inverseDiff, Operation } from "./diff";
 import type { DiffChunk } from "./diff";
 
 describe("compute diff should be compliant with server implemenation", () => {
@@ -10,7 +10,7 @@ describe("compute diff should be compliant with server implemenation", () => {
 			text: "hello world!",
 			update: "hello!",
 			expected: [
-				{ position: 5, type: Operation.DiffRemove, text: " world", len: 6 },
+				{ position: 5, type: Operation.Remove, text: " world", len: 6 },
 			] as DiffChunk[],
 		},
 		{
@@ -18,7 +18,7 @@ describe("compute diff should be compliant with server implemenation", () => {
 			text: " ",
 			update: "",
 			expected: [
-				{ position: 0, type: Operation.DiffRemove, text: " ", len: 1 },
+				{ position: 0, type: Operation.Remove, text: " ", len: 1 },
 			] as DiffChunk[],
 		},
 		{
@@ -26,7 +26,7 @@ describe("compute diff should be compliant with server implemenation", () => {
 			text: "hello!",
 			update: "hello world!",
 			expected: [
-				{ position: 5, type: Operation.DiffAdd, text: " world", len: 6 },
+				{ position: 5, type: Operation.Add, text: " world", len: 6 },
 			] as DiffChunk[],
 		},
 		{
@@ -34,7 +34,7 @@ describe("compute diff should be compliant with server implemenation", () => {
 			text: "h",
 			update: "he",
 			expected: [
-				{ position: 1, type: Operation.DiffAdd, text: "e", len: 1 },
+				{ position: 1, type: Operation.Add, text: "e", len: 1 },
 			] as DiffChunk[],
 		},
 		{
@@ -107,7 +107,7 @@ describe("applyDiff should modify text as expected", () => {
 	test("remove a chunk from empty string", () => {
 		const emptyText = "";
 		const diffToRemove = {
-			type: Operation.DiffRemove,
+			type: Operation.Remove,
 			len: 4,
 			text: "test",
 			position: 10,
@@ -116,3 +116,38 @@ describe("applyDiff should modify text as expected", () => {
 		assert.strictEqual(applyDiff(emptyText, diffToRemove), "");
 	});
 });
+
+describe("inverseDiff", () => {
+	const tests = [
+		{
+			name: "inverse add diff",
+			text: "hello world!",
+			update: "hello!",
+			diff: { position: 5, type: Operation.Add, text: " world", len: 6 } as DiffChunk,
+			expected: { position: 5, type: Operation.Remove, text: " world", len: 6 } as DiffChunk,
+		},
+		{
+			name: "inverse remove diff",
+			text: "hello!",
+			update: "hello world!",
+			diff: { position: 5, type: Operation.Remove, text: " world", len: 6 } as DiffChunk,
+			expected: { position: 5, type: Operation.Add, text: " world", len: 6 } as DiffChunk,
+		},
+	];
+
+	for (const { name, text, update, expected } of tests) {
+		test(name, () => {
+			let resultText = text;
+			const diffs = computeDiff(update, text);
+
+			assert.equal(diffs.length, 1)
+
+			const invert = inverseDiff(diffs[0])
+			assert.deepEqual(invert, expected)
+
+			resultText = applyDiff(resultText, invert);
+			assert.strictEqual(resultText, update);
+		});
+	}
+});
+

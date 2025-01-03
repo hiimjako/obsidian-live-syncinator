@@ -1,6 +1,6 @@
 import type { TAbstractFile } from "obsidian";
 import type { ApiClient } from "./api/api";
-import { computeDiff, type DiffChunk } from "./diff";
+import { computeDiff, invertDiff, type DiffChunk } from "./diff";
 import type { Disk } from "./storage/storage";
 import {
 	MessageType,
@@ -13,6 +13,9 @@ import { log } from "src/logger/logger";
 import { isTextFile } from "./utils/mime";
 import { isText } from "./storage/filetype";
 import { FileCache } from "./cache";
+import { DequeRegistry } from "./messageQueue";
+import { shallowEqualStrict } from "./utils/comparison";
+import { deepEqual } from "node:assert";
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -28,6 +31,7 @@ export class Syncinator {
 	private fileCache: FileCache = new FileCache();
 	private apiClient: ApiClient;
 	private wsClient: WsClient;
+	private messageQueueRegistry = new DequeRegistry<number, ChunkMessage>();
 	events: Events;
 
 	constructor(storage: Disk, apiClient: ApiClient, wsClient: WsClient) {
@@ -119,36 +123,34 @@ export class Syncinator {
 				const stat = await this.storage.stat(file.workspacePath);
 				const localFileMtime = new Date(stat?.mtime ?? stat?.ctime ?? 0);
 				const remoteFileMtime = new Date(fileWithContent.updatedAt);
-				if (remoteFileMtime >= localFileMtime) {
-					log.debug(
-						`handling conflic on file ${file.workspacePath}, overwriting local copy`,
-					);
-					this.fileCache.setById(file.id, {
-						...file,
-						content: fileWithContent.content,
-					});
-					await this.storage.write(
-						file.workspacePath,
-						fileWithContent.content,
-						{ force: true },
-					);
-				} else {
-					log.debug(
-						`handling conflic on file ${file.workspacePath}, overwriting remote copy`,
-					);
-					this.fileCache.setById(file.id, {
-						...file,
-						updatedAt: new Date(stat?.mtime ?? "").toISOString(),
-						content: localContent,
-					});
-					const msg: ChunkMessage = {
-						type: MessageType.Chunk,
-						fileId: fileWithContent.id,
-						chunks,
-						version: fileWithContent.version,
-					};
-					this.wsClient.sendMessage(msg);
-				}
+				// if (remoteFileMtime >= localFileMtime) {
+				log.debug(
+					`handling conflic on file ${file.workspacePath}, overwriting local copy`,
+				);
+				this.fileCache.setById(file.id, {
+					...file,
+					content: fileWithContent.content,
+				});
+				await this.storage.write(file.workspacePath, fileWithContent.content, {
+					force: true,
+				});
+				// } else {
+				// 	log.debug(
+				// 		`handling conflic on file ${file.workspacePath}, overwriting remote copy`,
+				// 	);
+				// 	this.fileCache.setById(file.id, {
+				// 		...file,
+				// 		updatedAt: new Date(stat?.mtime ?? "").toISOString(),
+				// 		content: localContent,
+				// 	});
+				// 	const msg: ChunkMessage = {
+				// 		type: MessageType.Chunk,
+				// 		fileId: fileWithContent.id,
+				// 		chunks,
+				// 		version: fileWithContent.version,
+				// 	};
+				// 	this.wsClient.sendMessage(msg);
+				// }
 			}
 		}
 	}
@@ -162,8 +164,38 @@ export class Syncinator {
 			return;
 		}
 
+		const deque = this.messageQueueRegistry.getDeque(fileId);
+		if (!deque.isEmpty() && isSameChunkMessage(data, deque.peekFront())) {
+			// it is an ack
+			log.debug(
+				`[onChunkMessage] ack message ${file.workspacePath} ${file.id}`,
+			);
+			file.version = version;
+			this.fileCache.setById(file.id, file);
+			deque.removeFront();
+			return;
+		}
+
+		if (!deque.isEmpty()) {
+			log.debug(
+				`[onChunkMessage] out of sync ${file.workspacePath} ${file.id}`,
+			);
+
+			// we are out of sync, we must revert the changes and apply it from server
+			while (!deque.isEmpty()) {
+				const cm = deque.removeFront();
+				for (let i = 0; i < cm.chunks.length; i++) {
+					const inverse = invertDiff(cm.chunks[i]);
+					await this.storage.persistChunk(file.workspacePath, inverse);
+				}
+			}
+		}
+
 		const chunksToPersist: DiffChunk[] = [];
 		if (file.version + 1 !== version) {
+			log.debug(
+				`[onChunkMessage] missing intermidiate msg ${file.workspacePath} ${file.id}`,
+			);
 			const operations = await this.apiClient.fetchOperations(
 				fileId,
 				file.version,
@@ -171,6 +203,12 @@ export class Syncinator {
 
 			let currVersion = file.version;
 			for (const operation of operations) {
+				if (operation.version >= data.version) {
+					// TODO: we need all the operation till the current, we need to
+					// add another parameter to API
+					break;
+				}
+
 				if (currVersion + 1 !== operation.version) {
 					log.error(
 						`missing operation in history for file ${file.workspacePath} ${fileId}`,
@@ -366,7 +404,7 @@ export class Syncinator {
 		this.fileCache.setById(fileId, currentFile);
 
 		if (chunks.length > 0) {
-			log.info("modify", { fileId, chunks, oldContent, newContent });
+			log.debug("modify", { fileId, chunks, oldContent, newContent });
 
 			const msg: ChunkMessage = {
 				type: MessageType.Chunk,
@@ -374,6 +412,7 @@ export class Syncinator {
 				chunks,
 				version: currentFile.version,
 			};
+			this.messageQueueRegistry.getDeque(fileId).addBack(msg);
 			this.wsClient.sendMessage(msg);
 		}
 	}
@@ -504,4 +543,25 @@ export class Syncinator {
 	cacheDump() {
 		return this.fileCache.dump();
 	}
+}
+
+function isSameChunkMessage(
+	fromWs: ChunkMessage,
+	fromDeque: ChunkMessage,
+): boolean {
+	if (fromWs.chunks.length !== fromDeque.chunks.length) {
+		return false;
+	}
+
+	for (let i = 0; i < fromWs.chunks.length; i++) {
+		if (!shallowEqualStrict(fromWs.chunks[i], fromDeque.chunks[i])) {
+			return false;
+		}
+	}
+
+	// +1 because this the server acks the message with a +1 version
+	const sameVersion = fromWs.version === fromDeque.version + 1;
+	const sameType = fromWs.type === fromDeque.type;
+
+	return sameVersion && sameType;
 }

@@ -48,7 +48,7 @@ describe("WsClient with real WebSocket server", () => {
 		const message: ChunkMessage = {
 			fileId: 123,
 			type: MessageType.Chunk,
-			chunks: [{ type: Operation.DiffAdd, position: 0, len: 0, text: "" }],
+			chunks: [{ type: Operation.Add, position: 0, len: 0, text: "" }],
 		};
 
 		server.on("connection", (ws) => {
