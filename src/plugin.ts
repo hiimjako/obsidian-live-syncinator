@@ -39,6 +39,8 @@ export class Syncinator {
 	private options: Options = {
 		conflictResolution: "remote",
 	};
+	private lockedFiles = new Set<number>();
+
 	events: Events;
 
 	constructor(
@@ -197,73 +199,84 @@ export class Syncinator {
 			return;
 		}
 
-		const deque = this.messageQueueRegistry.getDeque(fileId);
-		if (!deque.isEmpty() && isSameChunkMessage(data, deque.peekFront())) {
-			// it is an ack
-			log.debug(
-				`[onChunkMessage] ack message ${file.workspacePath} ${file.id}`,
+		if (this.lockedFiles.has(fileId)) {
+			log.error(`file ${fileId} already locked!`);
+		}
+		this.lockedFiles.add(fileId);
+
+		try {
+			const deque = this.messageQueueRegistry.getDeque(fileId);
+			if (!deque.isEmpty() && isSameChunkMessage(data, deque.peekFront())) {
+				// it is an ack
+				log.debug(
+					`[onChunkMessage] ack message ${file.workspacePath} ${file.id}`,
+				);
+				file.version = version;
+				this.fileCache.setById(file.id, file);
+				deque.removeFront();
+				return;
+			}
+
+			if (!deque.isEmpty()) {
+				log.debug(
+					`[onChunkMessage] out of sync ${file.workspacePath} ${file.id}`,
+				);
+
+				// we are out of sync, we must revert the changes and apply it from server
+				while (!deque.isEmpty()) {
+					const cm = deque.removeFront();
+					for (let i = 0; i < cm.chunks.length; i++) {
+						const inverse = invertDiff(cm.chunks[i]);
+						await this.storage.persistChunk(file.workspacePath, inverse);
+					}
+				}
+			}
+
+			const chunksToPersist: DiffChunk[] = [];
+			if (file.version + 1 !== version) {
+				log.debug(
+					`[onChunkMessage] missing intermidiate msg ${file.workspacePath} ${file.id}`,
+				);
+				const operations = await this.apiClient.fetchOperations(
+					fileId,
+					file.version,
+				);
+
+				let currVersion = file.version;
+				for (const operation of operations) {
+					if (operation.version >= data.version) {
+						// TODO: we need all the operation till the current, we need to
+						// add another parameter to API
+						break;
+					}
+
+					if (currVersion + 1 !== operation.version) {
+						log.error(
+							`missing operation in history for file ${file.workspacePath} ${fileId}`,
+						);
+						return;
+					}
+
+					chunksToPersist.push(...operation.operation);
+					currVersion = operation.version;
+				}
+			}
+
+			chunksToPersist.push(...chunks);
+			const content = await this.storage.persistChunks(
+				file.workspacePath,
+				chunksToPersist,
 			);
+
 			file.version = version;
+			file.content = content;
+
 			this.fileCache.setById(file.id, file);
-			deque.removeFront();
-			return;
+		} catch (error) {
+			log.error(`Error processing chunk message for file '${fileId}':`, error);
+		} finally {
+			this.lockedFiles.delete(fileId);
 		}
-
-		if (!deque.isEmpty()) {
-			log.debug(
-				`[onChunkMessage] out of sync ${file.workspacePath} ${file.id}`,
-			);
-
-			// we are out of sync, we must revert the changes and apply it from server
-			while (!deque.isEmpty()) {
-				const cm = deque.removeFront();
-				for (let i = 0; i < cm.chunks.length; i++) {
-					const inverse = invertDiff(cm.chunks[i]);
-					await this.storage.persistChunk(file.workspacePath, inverse);
-				}
-			}
-		}
-
-		const chunksToPersist: DiffChunk[] = [];
-		if (file.version + 1 !== version) {
-			log.debug(
-				`[onChunkMessage] missing intermidiate msg ${file.workspacePath} ${file.id}`,
-			);
-			const operations = await this.apiClient.fetchOperations(
-				fileId,
-				file.version,
-			);
-
-			let currVersion = file.version;
-			for (const operation of operations) {
-				if (operation.version >= data.version) {
-					// TODO: we need all the operation till the current, we need to
-					// add another parameter to API
-					break;
-				}
-
-				if (currVersion + 1 !== operation.version) {
-					log.error(
-						`missing operation in history for file ${file.workspacePath} ${fileId}`,
-					);
-					return;
-				}
-
-				chunksToPersist.push(...operation.operation);
-				currVersion = operation.version;
-			}
-		}
-
-		chunksToPersist.push(...chunks);
-		const content = await this.storage.persistChunks(
-			file.workspacePath,
-			chunksToPersist,
-		);
-
-		file.version = version;
-		file.content = content;
-
-		this.fileCache.setById(file.id, file);
 	}
 
 	async onEventMessage(event: EventMessage) {
@@ -421,6 +434,12 @@ export class Syncinator {
 			return;
 		}
 		const fileId = currentFile.id;
+
+		if (this.lockedFiles.has(fileId)) {
+			// FIXME: with this method if another client continues to write I will never
+			// acquire the lock
+			return;
+		}
 
 		if (
 			!isTextFile(currentFile.mimeType) ||
