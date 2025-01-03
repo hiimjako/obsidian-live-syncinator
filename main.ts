@@ -31,6 +31,9 @@ export default class Syncinator extends Plugin {
 			this.storage,
 			this.apiClient,
 			this.wsClient,
+			{
+				conflictResolution: this.settings.conflictResolution,
+			},
 		);
 
 		await plugin.init();

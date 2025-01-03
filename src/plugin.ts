@@ -15,7 +15,6 @@ import { isText } from "./storage/filetype";
 import { FileCache } from "./cache";
 import { DequeRegistry } from "./messageQueue";
 import { shallowEqualStrict } from "./utils/comparison";
-import { deepEqual } from "node:assert";
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -26,15 +25,28 @@ export interface Events {
 	rename(file: TAbstractFile, oldPath: string): Promise<void>;
 }
 
+export type ConflictResolution = "remote" | "local" | "auto";
+export interface Options {
+	conflictResolution: ConflictResolution;
+}
+
 export class Syncinator {
 	private storage: Disk;
 	private fileCache: FileCache = new FileCache();
 	private apiClient: ApiClient;
 	private wsClient: WsClient;
 	private messageQueueRegistry = new DequeRegistry<number, ChunkMessage>();
+	private options: Options = {
+		conflictResolution: "remote",
+	};
 	events: Events;
 
-	constructor(storage: Disk, apiClient: ApiClient, wsClient: WsClient) {
+	constructor(
+		storage: Disk,
+		apiClient: ApiClient,
+		wsClient: WsClient,
+		opts: Options,
+	) {
 		this.storage = storage;
 		this.apiClient = apiClient;
 		this.wsClient = wsClient;
@@ -49,6 +61,8 @@ export class Syncinator {
 			modify: this.modify.bind(this),
 			rename: this.rename.bind(this),
 		};
+
+		this.options = opts;
 	}
 
 	async init() {
@@ -105,6 +119,7 @@ export class Syncinator {
 				await this.storage.write(file.workspacePath, fileWithContent.content);
 			} else {
 				// Conflict
+
 				if (
 					!isText(file.workspacePath) ||
 					typeof fileWithContent.content !== "string"
@@ -112,45 +127,63 @@ export class Syncinator {
 					// TODO: it should check for binary files that changed with same workspacePath
 					continue;
 				}
-
 				const localContent = await this.storage.readText(file.workspacePath);
-				// target is local content
-				const chunks = computeDiff(fileWithContent.content, localContent);
-				if (chunks.length === 0) {
+				if (fileWithContent.content === localContent) {
 					continue;
 				}
 
 				const stat = await this.storage.stat(file.workspacePath);
 				const localFileMtime = new Date(stat?.mtime ?? stat?.ctime ?? 0);
 				const remoteFileMtime = new Date(fileWithContent.updatedAt);
-				// if (remoteFileMtime >= localFileMtime) {
-				log.debug(
-					`handling conflic on file ${file.workspacePath}, overwriting local copy`,
-				);
-				this.fileCache.setById(file.id, {
-					...file,
-					content: fileWithContent.content,
-				});
-				await this.storage.write(file.workspacePath, fileWithContent.content, {
-					force: true,
-				});
-				// } else {
-				// 	log.debug(
-				// 		`handling conflic on file ${file.workspacePath}, overwriting remote copy`,
-				// 	);
-				// 	this.fileCache.setById(file.id, {
-				// 		...file,
-				// 		updatedAt: new Date(stat?.mtime ?? "").toISOString(),
-				// 		content: localContent,
-				// 	});
-				// 	const msg: ChunkMessage = {
-				// 		type: MessageType.Chunk,
-				// 		fileId: fileWithContent.id,
-				// 		chunks,
-				// 		version: fileWithContent.version,
-				// 	};
-				// 	this.wsClient.sendMessage(msg);
-				// }
+
+				const shouldRemote =
+					this.options.conflictResolution === "auto" &&
+					remoteFileMtime >= localFileMtime;
+
+				const shouldLocal =
+					this.options.conflictResolution === "auto" &&
+					remoteFileMtime < localFileMtime;
+
+				if (this.options.conflictResolution === "remote" || shouldRemote) {
+					log.debug(
+						`handling conflic on file ${file.workspacePath}, overwriting local copy`,
+					);
+					this.fileCache.setById(file.id, {
+						...file,
+						content: fileWithContent.content,
+					});
+					await this.storage.write(
+						file.workspacePath,
+						fileWithContent.content,
+						{
+							force: true,
+						},
+					);
+				} else if (this.options.conflictResolution === "local" || shouldLocal) {
+					// target is local content
+					const chunks = computeDiff(fileWithContent.content, localContent);
+					if (chunks.length === 0) {
+						continue;
+					}
+
+					log.debug(
+						`handling conflic on file ${file.workspacePath}, overwriting remote copy`,
+					);
+					this.fileCache.setById(file.id, {
+						...file,
+						updatedAt: new Date(stat?.mtime ?? "").toISOString(),
+						content: localContent,
+					});
+					const msg: ChunkMessage = {
+						type: MessageType.Chunk,
+						fileId: fileWithContent.id,
+						chunks,
+						version: fileWithContent.version,
+					};
+					this.wsClient.sendMessage(msg);
+				} else {
+					log.warn(`conflict on file ${file.workspacePath} not solved`);
+				}
 			}
 		}
 	}

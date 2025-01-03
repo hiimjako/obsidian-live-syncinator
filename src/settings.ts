@@ -1,7 +1,8 @@
 import type { App } from "obsidian";
-import { Setting, PluginSettingTab } from "obsidian";
+import { Setting, PluginSettingTab, Notice } from "obsidian";
 import type Syncinator from "../main";
 import { log, LogLevel, type LogLevelType } from "./logger/logger";
+import type { ConflictResolution } from "./plugin";
 
 export interface PluginSettings {
 	domain: string;
@@ -9,6 +10,7 @@ export interface PluginSettings {
 	workspaceName: string;
 	workspacePass: string;
 	logLevel: LogLevelType;
+	conflictResolution: ConflictResolution;
 }
 
 export const DEFAULT_SETTINGS: PluginSettings = {
@@ -17,6 +19,7 @@ export const DEFAULT_SETTINGS: PluginSettings = {
 	workspaceName: "",
 	workspacePass: "",
 	logLevel: LogLevel.WARN,
+	conflictResolution: "remote",
 };
 
 export class SettingTab extends PluginSettingTab {
@@ -90,12 +93,29 @@ export class SettingTab extends PluginSettingTab {
 					}),
 			);
 
+		new Setting(containerEl)
+			.setName("Conflict resolution")
+			.setDesc("how to manage text file conflicts")
+			.addDropdown((component) =>
+				component
+					.addOptions({
+						remote: "Remote",
+						local: "Local",
+						auto: "Auto merge",
+					})
+					.setValue(this.plugin.settings.conflictResolution.toString())
+					.onChange((value: ConflictResolution) => {
+						this.plugin.settings.conflictResolution = value;
+					}),
+			);
+
 		new Setting(containerEl).addButton((button) =>
 			button
 				.setButtonText("save")
 				.setWarning()
 				.onClick(async () => {
 					await this.plugin.saveSettings();
+					new Notice("Settings saved!");
 				}),
 		);
 	}
