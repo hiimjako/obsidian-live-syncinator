@@ -45,7 +45,7 @@ export class FileCache {
 		this.idToFile.set(fileId, file);
 	}
 
-	updatePath(id: number, newPath: string) {
+	setPath(id: number, newPath: string) {
 		const file = this.idToFile.get(id);
 		if (file === undefined) {
 			return;
@@ -57,6 +57,16 @@ export class FileCache {
 
 		this.idToFile.set(id, file);
 		this.filepathToId.set(newPath, id);
+	}
+
+	setVersion(id: number, version: number) {
+		const file = this.idToFile.get(id);
+		if (file === undefined) {
+			return;
+		}
+
+		file.version = version;
+		this.idToFile.set(id, file);
 	}
 
 	private delete(id: number) {

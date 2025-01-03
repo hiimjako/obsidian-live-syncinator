@@ -15,6 +15,7 @@ export interface MessageHeader {
 
 export interface ChunkMessage extends MessageHeader {
 	chunks: DiffChunk[];
+	version: number;
 }
 
 export interface EventMessage extends MessageHeader {

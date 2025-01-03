@@ -2,6 +2,7 @@ import test, { describe } from "node:test";
 import { FileCache } from "./cache";
 import assert from "node:assert";
 import type { FileWithContent } from "./api/api";
+import { version } from "node:os";
 
 describe("FileCache", () => {
 	const testFile: FileWithContent = {
@@ -14,6 +15,7 @@ describe("FileCache", () => {
 		updatedAt: "",
 		workspaceId: 1,
 		content: "",
+		version: 1,
 	};
 
 	test("create", () => {
@@ -32,6 +34,7 @@ describe("FileCache", () => {
 				updatedAt: "",
 				workspaceId: 1,
 				content: "",
+				version: 1,
 			},
 		]);
 	});
@@ -82,7 +85,7 @@ describe("FileCache", () => {
 
 		fc.create(testFile);
 
-		fc.updatePath(testFile.id, "newPath.md");
+		fc.setPath(testFile.id, "newPath.md");
 
 		assert.deepEqual(fc.hasByPath("foo.md"), false);
 

@@ -2,6 +2,7 @@ import { StatusCodes } from "http-status-codes";
 import type { HttpClient } from "./http";
 import path from "path-browserify";
 import { Multipart } from "./multipart";
+import type { DiffChunk } from "src/diff";
 
 export declare interface File {
 	id: number;
@@ -12,15 +13,18 @@ export declare interface File {
 	createdAt: string;
 	updatedAt: string;
 	workspaceId: number;
+	version: number;
 }
 
 export declare interface FileWithContent extends File {
 	content: string | ArrayBuffer;
 }
 
-declare interface CreateFile {
-	path: string;
-	content: string;
+export declare interface Operation {
+	fileId: number;
+	version: number;
+	operation: DiffChunk[];
+	createdAt: string;
 }
 
 declare interface UpdateFile {
@@ -47,6 +51,21 @@ export class ApiClient {
 
 		if (res.status !== StatusCodes.OK) {
 			throw new Error(`error while fetching files: ${res.data}`);
+		}
+
+		return res.data ?? [];
+	}
+
+	async fetchOperations(
+		fileId: number,
+		fromVersion: number,
+	): Promise<Operation[]> {
+		const res = await this.client.get<Operation[]>(
+			`/v1/api/operation?fileId=${fileId}&from=${fromVersion}`,
+		);
+
+		if (res.status !== StatusCodes.OK) {
+			throw new Error(`error while fetching operation: ${res.data}`);
 		}
 
 		return res.data ?? [];

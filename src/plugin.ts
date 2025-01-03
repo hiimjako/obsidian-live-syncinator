@@ -1,6 +1,6 @@
 import type { TAbstractFile } from "obsidian";
 import type { ApiClient } from "./api/api";
-import { computeDiff } from "./diff";
+import { computeDiff, type DiffChunk } from "./diff";
 import type { Disk } from "./storage/storage";
 import {
 	MessageType,
@@ -120,6 +120,9 @@ export class Syncinator {
 				const localFileMtime = new Date(stat?.mtime ?? stat?.ctime ?? 0);
 				const remoteFileMtime = new Date(fileWithContent.updatedAt);
 				if (remoteFileMtime >= localFileMtime) {
+					log.debug(
+						`handling conflic on file ${file.workspacePath}, overwriting local copy`,
+					);
 					this.fileCache.setById(file.id, {
 						...file,
 						content: fileWithContent.content,
@@ -130,6 +133,9 @@ export class Syncinator {
 						{ force: true },
 					);
 				} else {
+					log.debug(
+						`handling conflic on file ${file.workspacePath}, overwriting remote copy`,
+					);
 					this.fileCache.setById(file.id, {
 						...file,
 						updatedAt: new Date(stat?.mtime ?? "").toISOString(),
@@ -139,6 +145,7 @@ export class Syncinator {
 						type: MessageType.Chunk,
 						fileId: fileWithContent.id,
 						chunks,
+						version: fileWithContent.version,
 					};
 					this.wsClient.sendMessage(msg);
 				}
@@ -148,7 +155,7 @@ export class Syncinator {
 
 	async onChunkMessage(data: ChunkMessage) {
 		log.debug("[socket] chunk", data);
-		const { fileId, chunks } = data;
+		const { fileId, chunks, version } = data;
 
 		const file = this.fileCache.getById(fileId);
 		if (file == null) {
@@ -156,11 +163,34 @@ export class Syncinator {
 			return;
 		}
 
+		const chunksToPersist: DiffChunk[] = [];
+		if (file.version + 1 !== version) {
+			const operations = await this.apiClient.fetchOperations(
+				fileId,
+				file.version,
+			);
+
+			let currVersion = file.version;
+			for (const operation of operations) {
+				if (currVersion + 1 !== operation.version) {
+					log.error(
+						`missing operation in history for file ${file.workspacePath} ${fileId}`,
+					);
+					return;
+				}
+
+				chunksToPersist.push(...operation.operation);
+				currVersion = operation.version;
+			}
+		}
+
+		chunksToPersist.push(...chunks);
 		const content = await this.storage.persistChunks(
 			file.workspacePath,
-			chunks,
+			chunksToPersist,
 		);
 
+		file.version = version;
 		file.content = content;
 
 		this.fileCache.setById(file.id, file);
@@ -225,7 +255,7 @@ export class Syncinator {
 				const fileApi = await this.apiClient.fetchFile(event.fileId);
 				const oldPath = file.workspacePath;
 				const newPath = fileApi.workspacePath;
-				this.fileCache.updatePath(file.id, newPath);
+				this.fileCache.setPath(file.id, newPath);
 
 				this.storage.rename(oldPath, newPath);
 			} else if (event.objectType === "folder") {
@@ -247,7 +277,7 @@ export class Syncinator {
 					const newPath = fileApi.workspacePath;
 
 					if (oldPath !== newPath) {
-						this.fileCache.updatePath(fileDesc.id, newPath);
+						this.fileCache.setPath(fileDesc.id, newPath);
 						this.storage.rename(oldPath, fileApi.workspacePath);
 					}
 				}
@@ -345,6 +375,7 @@ export class Syncinator {
 				type: MessageType.Chunk,
 				fileId,
 				chunks,
+				version: currentFile.version,
 			};
 			this.wsClient.sendMessage(msg);
 		}
@@ -428,7 +459,7 @@ export class Syncinator {
 					log.error(error);
 				}
 
-				this.fileCache.updatePath(fileDesc.id, newFilePath);
+				this.fileCache.setPath(fileDesc.id, newFilePath);
 				this.storage.rename(oldFilePath, newFilePath);
 			}
 
@@ -457,7 +488,7 @@ export class Syncinator {
 
 		try {
 			await this.apiClient.updateFile(fileToRename.id, file.path);
-			this.fileCache.updatePath(fileToRename.id, file.path);
+			this.fileCache.setPath(fileToRename.id, file.path);
 
 			// First we create the file so the other clients can fetch it on event
 			const msg: EventMessage = {
