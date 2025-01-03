@@ -154,7 +154,6 @@ export class Syncinator {
 	}
 
 	async onChunkMessage(data: ChunkMessage) {
-		log.debug("[socket] chunk", data);
 		const { fileId, chunks, version } = data;
 
 		const file = this.fileCache.getById(fileId);
@@ -197,8 +196,6 @@ export class Syncinator {
 	}
 
 	async onEventMessage(event: EventMessage) {
-		log.debug("[socket] new event", event);
-
 		// note the maps that keep track of the current files will be updated
 		// in the create and delete events, as creating a file will trigger
 		// this functions

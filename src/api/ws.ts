@@ -31,8 +31,8 @@ type Options = {
 
 export class WsClient {
 	private ws: WebSocket;
-	private domain = ""
-	private scheme: "ws" | "wss" = "ws"
+	private domain = "";
+	private scheme: "ws" | "wss" = "ws";
 	private jwtToken: string;
 	private isConnected = false;
 	private reconnectAttempts = 0;
@@ -48,8 +48,8 @@ export class WsClient {
 
 	constructor(scheme: "ws" | "wss", domain: string, options: Options = {}) {
 		this.options = { ...this.options, ...options };
-		this.scheme = scheme
-		this.domain = domain
+		this.scheme = scheme;
+		this.domain = domain;
 	}
 
 	private url() {
@@ -80,7 +80,7 @@ export class WsClient {
 	}
 
 	setAuthorization(token: string) {
-		this.jwtToken = token
+		this.jwtToken = token;
 	}
 
 	connect() {
@@ -90,7 +90,7 @@ export class WsClient {
 			this.isConnected = true;
 			this.reconnectAttempts = 0;
 			if (this.onOpenHandler) this.onOpenHandler();
-			log.info("WebSocket connected")
+			log.info("WebSocket connected");
 		};
 
 		this.ws.onclose = (event) => {
@@ -116,6 +116,7 @@ export class WsClient {
 					event.data.toString(),
 				);
 
+				log.debug("[ws] recived message", msg);
 				switch (msg.type) {
 					case MessageType.Chunk:
 						if (this.onChunkMessageHandler) {
@@ -154,7 +155,7 @@ export class WsClient {
 	}
 
 	close() {
-		this.isConnected = false
+		this.isConnected = false;
 		this.ws.close(1000);
 	}
 
@@ -163,6 +164,7 @@ export class WsClient {
 			log.warn("WebSocket is not connected. Unable to send data.");
 			return;
 		}
+		log.debug("[ws] sending message", msg);
 
 		const msgJson = JSON.stringify(msg);
 		this.ws.send(msgJson);
