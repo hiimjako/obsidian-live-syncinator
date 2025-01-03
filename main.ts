@@ -90,7 +90,7 @@ export default class Syncinator extends Plugin {
 	}
 
 	onunload() {
-		this.wsClient.close();
+		this.wsClient.close(true);
 	}
 
 	async loadSettings() {

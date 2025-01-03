@@ -30,12 +30,13 @@ type Options = {
 };
 
 export class WsClient {
-	private ws: WebSocket;
+	private ws: WebSocket | null = null;
 	private domain = "";
 	private scheme: "ws" | "wss" = "ws";
-	private jwtToken: string;
+	private jwtToken = "";
 	private isConnected = false;
 	private reconnectAttempts = 0;
+	private ignoreReconnections = false;
 	private options: Options = {
 		maxReconnectAttempts: -1,
 		reconnectIntervalMs: 1000,
@@ -43,8 +44,21 @@ export class WsClient {
 	private onOpenHandler?: () => void;
 	private onCloseHandler?: () => void;
 	private onErrorHandler?: (e: globalThis.Event) => void;
-	private onChunkMessageHandler?: (_: ChunkMessage) => Promise<void>;
-	private onEventMessageHandler?: (_: EventMessage) => Promise<void>;
+	private onChunkMessageHandler: (_: ChunkMessage) => Promise<void> =
+		async () => { };
+	private onEventMessageHandler: (_: EventMessage) => Promise<void> =
+		async () => { };
+
+	private chunkMessageQueue = new AsyncMessageQueue<ChunkMessage>(
+		async (message) => {
+			await this.onChunkMessageHandler(message);
+		},
+	);
+	private eventMessageQueue = new AsyncMessageQueue<EventMessage>(
+		async (msg) => {
+			await this.onEventMessageHandler(msg);
+		},
+	);
 
 	constructor(scheme: "ws" | "wss", domain: string, options: Options = {}) {
 		this.options = { ...this.options, ...options };
@@ -53,10 +67,7 @@ export class WsClient {
 	}
 
 	private url() {
-		if (this.jwtToken !== "") {
-			return `${this.scheme}://${this.domain}/v1/sync?jwt=${this.jwtToken}`;
-		}
-		return `${this.scheme}://${this.domain}/v1/sync`;
+		return `${this.scheme}://${this.domain}/v1/sync${this.jwtToken ? `?jwt=${this.jwtToken}` : ""}`;
 	}
 
 	onOpen(handler: () => void) {
@@ -84,6 +95,11 @@ export class WsClient {
 	}
 
 	connect() {
+		if (this.ws) {
+			log.warn("WebSocket connection already exists.");
+			return;
+		}
+
 		this.ws = new WebSocket(this.url());
 
 		this.ws.onopen = () => {
@@ -94,10 +110,11 @@ export class WsClient {
 		};
 
 		this.ws.onclose = (event) => {
+			this.isConnected = false;
+			this.ws = null;
 			if (!event.wasClean) {
 				log.error("WebSocket closed unexpectedly");
 			}
-			this.isConnected = false;
 			if (this.onCloseHandler) this.onCloseHandler();
 			this.reconnect();
 		};
@@ -110,25 +127,19 @@ export class WsClient {
 			}
 		};
 
-		this.ws.onmessage = async (event: MessageEvent<string>) => {
+		this.ws.onmessage = (event: MessageEvent<string>) => {
 			try {
-				const msg: ChunkMessage | EventMessage = JSON.parse(
-					event.data.toString(),
-				);
+				const msg: ChunkMessage | EventMessage = JSON.parse(event.data);
 
-				log.debug("[ws] recived message", msg);
+				log.debug("[ws] received message", msg);
 				switch (msg.type) {
 					case MessageType.Chunk:
-						if (this.onChunkMessageHandler) {
-							await this.onChunkMessageHandler(msg as ChunkMessage);
-						}
+						this.chunkMessageQueue.enqueue(msg as ChunkMessage);
 						break;
 					case MessageType.Create:
 					case MessageType.Delete:
 					case MessageType.Rename:
-						if (this.onEventMessageHandler) {
-							await this.onEventMessageHandler(msg as EventMessage);
-						}
+						this.eventMessageQueue.enqueue(msg as EventMessage);
 						break;
 					default:
 						log.error("message type:", msg.type, "not supported");
@@ -140,12 +151,18 @@ export class WsClient {
 	}
 
 	reconnect() {
+		if (this.ws !== null && this.isConnected === false) {
+			log.warn("already connected");
+		}
 		const mra = this.options?.maxReconnectAttempts ?? -1;
-		const attempts = this.reconnectAttempts < mra || mra === -1;
+		const attemptsAllowed = this.reconnectAttempts < mra || mra === -1;
 
-		if (attempts) {
+		if (attemptsAllowed && !this.ignoreReconnections) {
 			setTimeout(() => {
-				log.info("Reconnecting ws...");
+				if (this.ignoreReconnections) {
+					return;
+				}
+				log.info("Reconnecting WebSocket...");
 				this.reconnectAttempts++;
 				this.connect();
 			}, this.options.reconnectIntervalMs);
@@ -154,9 +171,15 @@ export class WsClient {
 		}
 	}
 
-	close() {
+	close(stopReconnect = false) {
 		this.isConnected = false;
-		this.ws.close(1000);
+		if (stopReconnect && this.ignoreReconnections === false) {
+			this.ignoreReconnections = stopReconnect;
+		}
+		if (this.ws) {
+			this.ws.close(1000);
+			this.ws = null;
+		}
 	}
 
 	sendMessage(msg: ChunkMessage | EventMessage) {
@@ -167,6 +190,57 @@ export class WsClient {
 		log.debug("[ws] sending message", msg);
 
 		const msgJson = JSON.stringify(msg);
-		this.ws.send(msgJson);
+		this.ws?.send(msgJson);
+	}
+}
+
+type QueueItem<T> = {
+	data: T;
+	timestamp: number;
+};
+
+class AsyncMessageQueue<T> {
+	private queue: QueueItem<T>[] = [];
+	private isProcessing = false;
+
+	constructor(private readonly processor: (data: T) => Promise<void>) { }
+
+	public enqueue(data: T): void {
+		const queueItem: QueueItem<T> = {
+			data,
+			timestamp: Date.now(),
+		};
+
+		this.queue.push(queueItem);
+
+		if (!this.isProcessing) {
+			this.processQueue();
+		}
+	}
+
+	public size(): number {
+		return this.queue.length;
+	}
+
+	public clear(): void {
+		this.queue = [];
+	}
+
+	private async processQueue(): Promise<void> {
+		if (this.queue.length === 0) {
+			this.isProcessing = false;
+			return;
+		}
+
+		this.isProcessing = true;
+
+		try {
+			const item = this.queue[0];
+			await this.processor(item.data);
+		} catch (error) {
+			log.error("Error processing queue item:", error);
+		}
+		this.queue.shift();
+		await this.processQueue();
 	}
 }
