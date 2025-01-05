@@ -4,6 +4,9 @@
 	"description": "Plugin to sync obsidian workspaces",
 	"main": "main.js",
 	"scripts": {
+		"docker-down": "docker compose -f .docker/docker-compose.yml down",
+		"docker-up": "docker compose -f .docker/docker-compose.yml up -d",
+		"ci-test": "npm run docker-up && npm run test",
 		"test": "node --import tsx --test-reporter spec --test './src/**/*.test.ts' './src/*.test.ts' --test-timeout=30s",
 		"dev": "node esbuild.config.mjs",
 		"build": "tsc -noEmit -skipLibCheck && node esbuild.config.mjs production",
