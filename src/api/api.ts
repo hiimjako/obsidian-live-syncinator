@@ -31,7 +31,7 @@ declare interface UpdateFile {
 	path: string;
 }
 
-interface WorkspaceCredentials {
+export interface WorkspaceCredentials {
 	name: string;
 	password: string;
 }
