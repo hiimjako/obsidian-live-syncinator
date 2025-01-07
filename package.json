@@ -10,7 +10,9 @@
 		"test": "node --import tsx --test-reporter spec --test './src/**/*.test.ts' './src/*.test.ts' --test-timeout=30s",
 		"dev": "node esbuild.config.mjs",
 		"build": "tsc -noEmit -skipLibCheck && node esbuild.config.mjs production",
-		"version": "node version-bump.mjs && git add manifest.json versions.json"
+		"version": "node version-bump.mjs && git add manifest.json versions.json",
+		"lint": "biome check --write --unsafe .",
+		"format": "biome format --write ."
 	},
 	"keywords": [],
 	"author": {
@@ -20,6 +22,7 @@
 	},
 	"license": "MIT",
 	"devDependencies": {
+		"@biomejs/biome": "^1.9.4",
 		"@types/diff": "^6.0.0",
 		"@types/node": "^22.8.7",
 		"@types/path-browserify": "^1.0.3",
