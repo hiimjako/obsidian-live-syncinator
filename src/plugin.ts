@@ -519,6 +519,12 @@ export class Syncinator {
         log.debug("[event]: delete", file);
 
         const deleteFile = async (fileId: number) => {
+            const fileFromCache = this.fileCache.getById(fileId);
+            if (!fileFromCache) {
+                // should be unreachable
+                log.error(`trying to delete a non existing file ${fileId}`);
+                return;
+            }
             try {
                 await this.apiClient.deleteFile(fileId);
                 this.fileCache.deleteById(fileId);
@@ -527,7 +533,7 @@ export class Syncinator {
                     type: MessageType.Delete,
                     fileId: fileId,
                     objectType: "file",
-                    workspacePath: file.path,
+                    workspacePath: fileFromCache.workspacePath,
                 };
                 this.wsClient.sendMessage(msg);
             } catch (error) {
@@ -545,7 +551,6 @@ export class Syncinator {
                 f.workspacePath.startsWith(file.path + path.sep),
             );
             for (const fileToDelete of files) {
-                this.fileCache.deleteById(fileToDelete.id);
                 await deleteFile(fileToDelete.id);
             }
 
