@@ -325,90 +325,49 @@ describe("Plugin integration tests", () => {
         } as EventMessage);
     });
 
-    // test("should rename a file on obsidian event 'rename'", async (t) => {
-    // 	const now = new Date().toISOString();
-    // 	const renameFile = t.mock.method(apiClient, "updateFile", () => { });
-    // 	const createOldFile = t.mock.method(
-    // 		apiClient,
-    // 		"createFile",
-    // 		(): File => {
-    // 			return {
-    // 				id: 1,
-    // 				workspacePath: "files/oldName.md",
-    // 				diskPath: "",
-    // 				hash: "",
-    // 				createdAt: now,
-    // 				updatedAt: now,
-    // 				mimeType: "",
-    // 				workspaceId: 1,
-    // 			};
-    // 		},
-    // 		{ times: 1 },
-    // 	);
-    // 	const sendMessage = t.mock.method(wsClient, "sendMessage", () => { });
-    // 	await storage.write("files/oldName.md", "test");
-    //
-    // 	await plugin.events.create({
-    // 		name: "newFile.md",
-    // 		path: "files/oldName.md",
-    // 		vault,
-    // 		parent: null,
-    // 	});
-    //
-    // 	assert.deepEqual(plugin.cacheDump(), [
-    // 		{
-    // 			content: "test",
-    // 			createdAt: now,
-    // 			diskPath: "",
-    // 			hash: "",
-    // 			id: 1,
-    // 			mimeType: "",
-    // 			updatedAt: now,
-    // 			workspaceId: 1,
-    // 			workspacePath: "files/oldName.md",
-    // 		},
-    // 	]);
-    //
-    // 	await plugin.events.rename(
-    // 		{
-    // 			name: "newName.md",
-    // 			path: "files/newName.md",
-    // 			vault,
-    // 			parent: null,
-    // 		},
-    // 		"files/oldName.md",
-    // 	);
-    //
-    // 	assert.deepEqual(plugin.cacheDump(), [
-    // 		{
-    // 			content: "test",
-    // 			createdAt: now,
-    // 			diskPath: "",
-    // 			hash: "",
-    // 			id: 1,
-    // 			mimeType: "",
-    // 			updatedAt: now,
-    // 			workspaceId: 1,
-    // 			workspacePath: "files/newName.md",
-    // 		},
-    // 	]);
-    // 	assert.strictEqual(renameFile.mock.callCount(), 1);
-    // 	assert.deepEqual(renameFile.mock.calls[0].arguments, [
-    // 		1,
-    // 		"files/newName.md",
-    // 	]);
-    //
-    // 	assert.strictEqual(createOldFile.mock.callCount(), 1);
-    // 	assert.strictEqual(sendMessage.mock.callCount(), 2);
-    // 	// ignore the first for creation
-    // 	assert.deepEqual(sendMessage.mock.calls[1].arguments[0], {
-    // 		type: MessageType.Rename,
-    // 		objectType: "file",
-    // 		fileId: 1,
-    // 		workspacePath: "files/oldName.md",
-    // 	} as EventMessage);
-    // });
-    //
+    test("should rename a file on obsidian event 'rename'", async (t) => {
+        const content = "lorem ipsum";
+        const oldFilename = "rename.md";
+        const oldFilepath = `files/${oldFilename}`;
+        const newFilename = "newName.md";
+        const newFilepath = `files/${newFilename}`;
+
+        const sendMessage = t.mock.method(wsClient, "sendMessage", () => {});
+
+        await apiClient.createFile(oldFilepath, content);
+        await storage.write(oldFilepath, content);
+
+        const filesPreInit = await apiClient.fetchFiles();
+        assert.equal(filesPreInit.length, 1);
+
+        // loading cache
+        await syncinator.init();
+
+        await syncinator.events.rename(
+            {
+                name: newFilename,
+                path: newFilepath,
+                vault,
+                parent: null,
+            },
+            oldFilepath,
+        );
+
+        // checking cache
+        const file = await apiClient.fetchFile(filesPreInit[0].id);
+        assert.equal(file.workspacePath, newFilepath);
+
+        assert.deepEqual(syncinator.cacheDump(), [{ ...file, content }]);
+
+        assert.strictEqual(sendMessage.mock.callCount(), 1);
+        assert.deepEqual(sendMessage.mock.calls[0].arguments[0], {
+            type: MessageType.Rename,
+            objectType: "file",
+            fileId: file.id,
+            workspacePath: oldFilepath,
+        } as EventMessage);
+    });
+
     // test("should rename a folder on obsidian event 'rename'", async (t) => {
     // 	const now = new Date().toISOString();
     // 	const createOldFile = t.mock.method(
