@@ -17,7 +17,7 @@ try {
     } else {
         throw new Error("Functions not found in external library");
     }
-} catch (error) {
+} catch (_error) {
     // Polyfill implementation
     arrayBufferToBase64 = (buffer: ArrayBuffer): string => {
         const binary = String.fromCharCode(...new Uint8Array(buffer));

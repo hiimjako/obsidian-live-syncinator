@@ -1,5 +1,4 @@
 import assert from "node:assert";
-import { version } from "node:os";
 import test, { describe } from "node:test";
 import type { FileWithContent } from "./api/api";
 import { FileCache } from "./cache";

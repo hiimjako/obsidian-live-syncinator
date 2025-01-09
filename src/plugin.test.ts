@@ -4,20 +4,14 @@ import fs from "node:fs/promises";
 import { afterEach, beforeEach, describe, mock, test } from "node:test";
 import { promisify } from "node:util";
 import type { Vault } from "obsidian";
-import {
-    ApiClient,
-    type File,
-    type FileWithContent,
-    type WorkspaceCredentials,
-} from "./api/api";
+import { ApiClient, type WorkspaceCredentials } from "./api/api";
 import { HttpClient } from "./api/http";
 import { type EventMessage, MessageType, WsClient } from "./api/ws";
 import { computeDiff } from "./diff";
-import { LogLevel, log } from "./logger/logger";
 import { Syncinator } from "./plugin";
 import { Disk } from "./storage/storage";
 import { CreateVaultMock } from "./storage/storage.mock";
-const sleep = promisify(setTimeout);
+const _sleep = promisify(setTimeout);
 
 function createNewUser(): WorkspaceCredentials {
     const name = Math.random().toString(36).slice(2);
@@ -464,7 +458,7 @@ describe("Plugin integration tests", () => {
     });
 
     describe("ws events", () => {
-        test("should write a new chunk coming from ws", async (t) => {
+        test("should write a new chunk coming from ws", async (_t) => {
             const content = "lorem ipsum";
             const newContent = "lorem bar ipsum";
             const filepath = "files/file.md";

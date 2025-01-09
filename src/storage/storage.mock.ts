@@ -195,7 +195,7 @@ export function CreateVaultMock(basepath: string): Vault {
                 buffer.byteOffset + buffer.byteLength,
             );
         },
-        async createBinary(normalizedPath, data, options) {
+        async createBinary(normalizedPath, data, _options) {
             if (!(data instanceof ArrayBuffer || ArrayBuffer.isView(data))) {
                 throw new Error("Data must be an ArrayBuffer or a TypedArray.");
             }
