@@ -30,7 +30,7 @@
 		"@typescript-eslint/eslint-plugin": "^8.12.2",
 		"@typescript-eslint/parser": "^8.19.1",
 		"builtin-modules": "^4.0.0",
-		"esbuild": "^0.24.0",
+		"esbuild": "^0.24.2",
 		"get-port": "^7.1.0",
 		"obsidian": "^1.7.2",
 		"tslib": "^2.8.1",
