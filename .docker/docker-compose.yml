@@ -1,7 +1,7 @@
 services:
   syncinator:
     container_name: syncinator-test-server
-    image: ghcr.io/hiimjako/obsidian-live-syncinator-server:main
+    image: ghcr.io/hiimjako/obsidian-live-syncinator-server:0.0.1
     environment:
       - JWT_SECRET=secret
       - SQLITE_FILEPATH=./data/db.sqlite3

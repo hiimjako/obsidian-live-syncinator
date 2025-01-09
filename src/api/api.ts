@@ -129,17 +129,19 @@ export class ApiClient {
         return res.data ?? {};
     }
 
-    async updateFile(fileId: number, path: string): Promise<void> {
+    async updateFile(fileId: number, path: string): Promise<File> {
         const body: UpdateFile = { path };
 
-        const res = await this.client.patch<void>(
+        const res = await this.client.patch<File>(
             `/v1/api/file/${fileId}`,
             body,
         );
 
-        if (res.status !== StatusCodes.NO_CONTENT) {
+        if (res.status !== StatusCodes.OK) {
             throw new Error(`error while updating file: ${res.data}`);
         }
+
+        return res.data ?? {};
     }
 
     async deleteFile(fileId: number): Promise<void> {

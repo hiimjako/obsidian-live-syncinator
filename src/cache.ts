@@ -59,6 +59,17 @@ export class FileCache {
         this.filepathToId.set(newPath, id);
     }
 
+    setUpdatedAt(id: number, updatedAt: string) {
+        const file = this.idToFile.get(id);
+        if (file === undefined) {
+            return;
+        }
+
+        file.updatedAt = updatedAt;
+
+        this.idToFile.set(id, file);
+    }
+
     setVersion(id: number, version: number) {
         const file = this.idToFile.get(id);
         if (file === undefined) {

@@ -290,7 +290,7 @@ describe("Plugin integration tests", () => {
         await syncinator.init();
 
         await syncinator.events.delete({
-            name: "folder",
+            name: "folderToDelete",
             path: "folderToDelete",
             vault,
             parent: null,
@@ -368,108 +368,76 @@ describe("Plugin integration tests", () => {
         } as EventMessage);
     });
 
-    // test("should rename a folder on obsidian event 'rename'", async (t) => {
-    // 	const now = new Date().toISOString();
-    // 	const createOldFile = t.mock.method(
-    // 		apiClient,
-    // 		"createFile",
-    // 		(): File => {
-    // 			return {
-    // 				id: 1,
-    // 				workspacePath: "oldFolder/file.md",
-    // 				diskPath: "",
-    // 				hash: "",
-    // 				createdAt: now,
-    // 				updatedAt: now,
-    // 				mimeType: "",
-    // 				workspaceId: 1,
-    // 			};
-    // 		},
-    // 		{ times: 1 },
-    // 	);
-    // 	const renameFile = t.mock.method(
-    // 		apiClient,
-    // 		"updateFile",
-    // 		(): File => {
-    // 			return {
-    // 				id: 1,
-    // 				workspacePath: "newFolder/file.md",
-    // 				diskPath: "",
-    // 				hash: "",
-    // 				createdAt: now,
-    // 				updatedAt: now,
-    // 				mimeType: "",
-    // 				workspaceId: 1,
-    // 			};
-    // 		},
-    // 		{ times: 1 },
-    // 	);
-    //
-    // 	const sendMessage = t.mock.method(wsClient, "sendMessage", () => { });
-    // 	await storage.write("oldFolder/file.md", "test");
-    //
-    // 	await plugin.events.create({
-    // 		name: "file.md",
-    // 		path: "oldFolder/file.md",
-    // 		vault,
-    // 		parent: null,
-    // 	});
-    //
-    // 	assert.deepEqual(plugin.cacheDump(), [
-    // 		{
-    // 			id: 1,
-    // 			workspacePath: "oldFolder/file.md",
-    // 			diskPath: "",
-    // 			hash: "",
-    // 			createdAt: now,
-    // 			updatedAt: now,
-    // 			mimeType: "",
-    // 			workspaceId: 1,
-    // 			content: "test",
-    // 		},
-    // 	]);
-    //
-    // 	await plugin.events.rename(
-    // 		{
-    // 			name: "newFolder",
-    // 			path: "newFolder",
-    // 			vault,
-    // 			parent: null,
-    // 		},
-    // 		"oldFolder",
-    // 	);
-    //
-    // 	assert.deepEqual(plugin.cacheDump(), [
-    // 		{
-    // 			content: "test",
-    // 			createdAt: now,
-    // 			diskPath: "",
-    // 			hash: "",
-    // 			id: 1,
-    // 			mimeType: "",
-    // 			updatedAt: now,
-    // 			workspaceId: 1,
-    // 			workspacePath: "newFolder/file.md",
-    // 		},
-    // 	]);
-    // 	assert.strictEqual(renameFile.mock.callCount(), 1);
-    // 	assert.deepEqual(renameFile.mock.calls[0].arguments, [
-    // 		1,
-    // 		"newFolder/file.md",
-    // 	]);
-    //
-    // 	assert.strictEqual(createOldFile.mock.callCount(), 1);
-    // 	assert.strictEqual(renameFile.mock.callCount(), 1);
-    // 	assert.strictEqual(sendMessage.mock.callCount(), 2);
-    // 	// ignore the first for creation
-    // 	assert.deepEqual(sendMessage.mock.calls[1].arguments[0], {
-    // 		type: MessageType.Rename,
-    // 		objectType: "folder",
-    // 		fileId: 0,
-    // 		workspacePath: "oldFolder",
-    // 	} as EventMessage);
-    // });
-    //
+    test("should rename a folder on obsidian event 'rename'", async (t) => {
+        const sendMessage = t.mock.method(wsClient, "sendMessage", () => {});
+        const filesToCreate = [
+            {
+                content: "lorem ipsum 1",
+                oldFilename: "file1.md",
+                oldFilepath: "folderToRename/file1.md",
+                newFilename: "file1.md",
+                newFilepath: "renamedFolder/file1.md",
+            },
+            {
+                content: "lorem ipsum 2",
+                oldFilename: "file2.md",
+                oldFilepath: "folderToRename/file2.md",
+                newFilename: "file2.md",
+                newFilepath: "renamedFolder/file2.md",
+            },
+            {
+                content: "lorem ipsum 3",
+                oldFilename: "file.md",
+                oldFilepath: "file.md",
+                newFilename: "file.md",
+                newFilepath: "file.md",
+            },
+        ];
+
+        for (const file of filesToCreate) {
+            await storage.write(file.oldFilepath, file.content);
+            await apiClient.createFile(file.oldFilepath, file.content);
+        }
+
+        const filesPreInit = await apiClient.fetchFiles();
+        assert.equal(filesPreInit.length, 3);
+
+        // loading cache
+        await syncinator.init();
+
+        await syncinator.events.rename(
+            {
+                name: "renamedFolder",
+                path: "renamedFolder",
+                vault,
+                parent: null,
+            },
+            "folderToRename",
+        );
+
+        // checking cache
+        const files = await apiClient.fetchFiles();
+        assert.equal(files.length, 3);
+
+        for (let i = 0; i < files.length; i++) {
+            assert.equal(files[i].workspacePath, filesToCreate[i].newFilepath);
+        }
+
+        assert.deepEqual(syncinator.cacheDump(), [
+            { ...files[0], content: "lorem ipsum 1" },
+            { ...files[1], content: "lorem ipsum 2" },
+            { ...files[2], content: "lorem ipsum 3" },
+        ]);
+
+        assert.strictEqual(sendMessage.mock.callCount(), 1);
+        assert.deepEqual(sendMessage.mock.calls[0].arguments[0], {
+            type: MessageType.Delete,
+            objectType: "folder",
+            fileId: 0,
+            workspacePath: "folderToRename",
+        } as EventMessage);
+    });
+
     // test("should write a new chunk coming from ws", async (t) => {
     // 	const now = new Date().toISOString();
     // 	const createFile = t.mock.method(apiClient, "createFile", (): File => {

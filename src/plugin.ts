@@ -596,13 +596,22 @@ export class Syncinator {
                 const newFilePath = oldFilePath.replace(oldPath, file.path);
 
                 try {
-                    await this.apiClient.updateFile(fileDesc.id, newFilePath);
+                    const updatedFile = await this.apiClient.updateFile(
+                        fileDesc.id,
+                        newFilePath,
+                    );
+                    this.fileCache.setUpdatedAt(
+                        fileDesc.id,
+                        updatedFile.updatedAt,
+                    );
+                    this.fileCache.setPath(
+                        fileDesc.id,
+                        updatedFile.workspacePath,
+                    );
+                    this.storage.rename(oldFilePath, updatedFile.workspacePath);
                 } catch (error) {
                     log.error(error);
                 }
-
-                this.fileCache.setPath(fileDesc.id, newFilePath);
-                this.storage.rename(oldFilePath, newFilePath);
             }
 
             // give time to obsidian to update cache
