@@ -1,6 +1,6 @@
+import binaryExtensions from "binaryextensions";
 import path from "path-browserify";
 import textExtensions from "textextensions";
-import binaryExtensions from "binaryextensions";
 
 export function isText(filename: string): boolean {
     const parts = path.basename(filename).split(".").reverse();

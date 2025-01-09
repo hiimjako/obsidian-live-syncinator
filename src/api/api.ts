@@ -1,8 +1,8 @@
 import { StatusCodes } from "http-status-codes";
-import type { HttpClient } from "./http";
 import path from "path-browserify";
-import { Multipart } from "./multipart";
 import type { DiffChunk } from "src/diff";
+import type { HttpClient } from "./http";
+import { Multipart } from "./multipart";
 
 export declare interface File {
     id: number;

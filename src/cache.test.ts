@@ -1,8 +1,8 @@
-import test, { describe } from "node:test";
-import { FileCache } from "./cache";
 import assert from "node:assert";
-import type { FileWithContent } from "./api/api";
 import { version } from "node:os";
+import test, { describe } from "node:test";
+import type { FileWithContent } from "./api/api";
+import { FileCache } from "./cache";
 
 describe("FileCache", () => {
     const testFile: FileWithContent = {

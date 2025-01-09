@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
-import { describe, it as test, afterEach, mock, beforeEach } from "node:test";
+import { randomUUID } from "node:crypto";
 import fs from "node:fs/promises";
+import { afterEach, beforeEach, describe, mock, it as test } from "node:test";
+import type { Vault } from "obsidian";
 import { computeDiff } from "../diff";
 import { Disk } from "../storage/storage";
 import { CreateVaultMock } from "../storage/storage.mock";
-import type { Vault } from "obsidian";
-import { randomUUID } from "node:crypto";
 
 describe("Disk storage integration tests", () => {
     let v: Vault;

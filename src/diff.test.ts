@@ -1,10 +1,10 @@
-import { describe, test } from "node:test";
 import assert from "node:assert";
+import { describe, test } from "node:test";
 import {
+    Operation,
     applyDiff,
     computeDiff,
     invertDiff as inverseDiff,
-    Operation,
 } from "./diff";
 import type { DiffChunk } from "./diff";
 

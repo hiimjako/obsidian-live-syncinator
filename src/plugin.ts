@@ -1,20 +1,20 @@
 import type { TAbstractFile } from "obsidian";
-import type { ApiClient } from "./api/api";
-import { computeDiff, invertDiff, type DiffChunk } from "./diff";
-import type { Disk } from "./storage/storage";
-import {
-    MessageType,
-    type ChunkMessage,
-    type EventMessage,
-    type WsClient,
-} from "./api/ws";
 import path from "path-browserify";
 import { log } from "src/logger/logger";
-import { isTextFile } from "./utils/mime";
-import { isText } from "./storage/filetype";
+import type { ApiClient } from "./api/api";
+import {
+    type ChunkMessage,
+    type EventMessage,
+    MessageType,
+    type WsClient,
+} from "./api/ws";
 import { FileCache } from "./cache";
+import { type DiffChunk, computeDiff, invertDiff } from "./diff";
 import { DequeRegistry } from "./messageQueue";
+import { isText } from "./storage/filetype";
+import type { Disk } from "./storage/storage";
 import { shallowEqualStrict } from "./utils/comparison";
+import { isTextFile } from "./utils/mime";
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 

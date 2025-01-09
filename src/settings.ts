@@ -1,7 +1,7 @@
 import type { App } from "obsidian";
-import { Setting, PluginSettingTab, Notice } from "obsidian";
+import { Notice, PluginSettingTab, Setting } from "obsidian";
 import type Syncinator from "../main";
-import { log, LogLevel, type LogLevelType } from "./logger/logger";
+import { LogLevel, type LogLevelType, log } from "./logger/logger";
 import type { ConflictResolution } from "./plugin";
 
 export interface PluginSettings {

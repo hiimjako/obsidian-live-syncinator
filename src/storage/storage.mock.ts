@@ -1,6 +1,6 @@
 import { promises as fs, readdirSync, statSync } from "node:fs";
 import path from "node:path";
-import type { TFolder, Vault, DataWriteOptions, Stat, TFile } from "obsidian";
+import type { DataWriteOptions, Stat, TFile, TFolder, Vault } from "obsidian";
 
 export function CreateVaultMock(basepath: string): Vault {
     const fullPath = (p: string): string => {

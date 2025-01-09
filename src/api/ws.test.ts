@@ -1,10 +1,10 @@
-import { describe, test, afterEach, beforeEach } from "node:test";
 import assert from "node:assert";
-import WebSocket from "ws";
-import { MessageType, WsClient } from "./ws";
+import { afterEach, beforeEach, describe, test } from "node:test";
 import getPort from "get-port";
-import type { ChunkMessage } from "./ws";
+import WebSocket from "ws";
 import { Operation } from "../diff";
+import { MessageType, WsClient } from "./ws";
+import type { ChunkMessage } from "./ws";
 
 describe("WsClient with real WebSocket server", () => {
     let server: WebSocket.Server;

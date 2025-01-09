@@ -1,7 +1,7 @@
 import path from "path-browserify";
-import { Operation, type DiffChunk } from "../diff";
+import { type DiffChunk, Operation } from "../diff";
 
-import type { TAbstractFile, TFile, Vault, Stat } from "obsidian";
+import type { Stat, TAbstractFile, TFile, Vault } from "obsidian";
 import { assert } from "src/utils/assert";
 
 export type WriteOptions = {
