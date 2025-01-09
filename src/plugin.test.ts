@@ -15,6 +15,9 @@ import type { Vault } from "obsidian";
 import assert from "node:assert";
 import { computeDiff } from "./diff";
 import { execSync } from "node:child_process";
+import { log, LogLevel } from "./logger/logger";
+import { promisify } from "node:util";
+const sleep = promisify(setTimeout);
 
 function createNewUser(): WorkspaceCredentials {
     const name = Math.random().toString(36).slice(2);
@@ -181,121 +184,80 @@ describe("Plugin integration tests", () => {
         });
     });
 
-    // test("should create a file on obsidian event 'create'", async (t) => {
-    // 	const now = new Date().toISOString();
-    // 	const createFile = t.mock.method(apiClient, "createFile", (): File => {
-    // 		return {
-    // 			id: 1,
-    // 			workspacePath: "files/newFile.md",
-    // 			diskPath: "",
-    // 			hash: "",
-    // 			createdAt: now,
-    // 			updatedAt: now,
-    // 			mimeType: "",
-    // 			workspaceId: 1,
-    // 		};
-    // 	});
-    // 	const sendMessage = t.mock.method(wsClient, "sendMessage", () => { });
-    // 	await storage.write("files/newFile.md", "test");
-    //
-    // 	await plugin.events.create({
-    // 		name: "newFile.md",
-    // 		path: "files/newFile.md",
-    // 		vault,
-    // 		parent: null,
-    // 	});
-    //
-    // 	// this should not trigger a call, since we already have the file in map
-    // 	await plugin.events.create({
-    // 		name: "newFile.md",
-    // 		path: "files/newFile.md",
-    // 		vault,
-    // 		parent: null,
-    // 	});
-    //
-    // 	assert.deepEqual(plugin.cacheDump(), [
-    // 		{
-    // 			content: "test",
-    // 			createdAt: now,
-    // 			diskPath: "",
-    // 			hash: "",
-    // 			id: 1,
-    // 			mimeType: "",
-    // 			updatedAt: now,
-    // 			workspaceId: 1,
-    // 			workspacePath: "files/newFile.md",
-    // 		},
-    // 	]);
-    // 	assert.strictEqual(createFile.mock.callCount(), 1);
-    // 	assert.strictEqual(sendMessage.mock.callCount(), 1);
-    // 	assert.deepEqual(sendMessage.mock.calls[0].arguments[0], {
-    // 		type: MessageType.Create,
-    // 		objectType: "file",
-    // 		fileId: 1,
-    // 		workspacePath: "files/newFile.md",
-    // 	} as EventMessage);
-    // });
-    //
-    // test("should delete a file on obsidian event 'delete'", async (t) => {
-    // 	const now = new Date().toISOString();
-    // 	const deleteFile = t.mock.method(apiClient, "deleteFile", () => { });
-    // 	const createFile = t.mock.method(apiClient, "createFile", (): File => {
-    // 		return {
-    // 			id: 1,
-    // 			workspacePath: "files/newFile.md",
-    // 			diskPath: "",
-    // 			hash: "",
-    // 			createdAt: now,
-    // 			updatedAt: now,
-    // 			mimeType: "",
-    // 			workspaceId: 1,
-    // 		};
-    // 	});
-    // 	const sendMessage = t.mock.method(wsClient, "sendMessage", () => { });
-    // 	await storage.write("files/newFile.md", "test");
-    //
-    // 	await plugin.events.create({
-    // 		name: "newFile.md",
-    // 		path: "files/newFile.md",
-    // 		vault,
-    // 		parent: null,
-    // 	});
-    //
-    // 	assert.deepEqual(plugin.cacheDump(), [
-    // 		{
-    // 			id: 1,
-    // 			workspacePath: "files/newFile.md",
-    // 			diskPath: "",
-    // 			hash: "",
-    // 			createdAt: now,
-    // 			updatedAt: now,
-    // 			mimeType: "",
-    // 			workspaceId: 1,
-    // 			content: "test",
-    // 		},
-    // 	]);
-    //
-    // 	await plugin.events.delete({
-    // 		name: "newFile.md",
-    // 		path: "files/newFile.md",
-    // 		vault,
-    // 		parent: null,
-    // 	});
-    //
-    // 	assert.deepEqual(plugin.cacheDump(), []);
-    //
-    // 	assert.strictEqual(deleteFile.mock.callCount(), 1);
-    // 	assert.strictEqual(createFile.mock.callCount(), 1);
-    // 	// one call for create and the second for delete
-    // 	assert.strictEqual(sendMessage.mock.callCount(), 2);
-    // 	assert.deepEqual(sendMessage.mock.calls[1].arguments[0], {
-    // 		type: MessageType.Delete,
-    // 		objectType: "file",
-    // 		fileId: 1,
-    // 		workspacePath: "files/newFile.md",
-    // 	} as EventMessage);
-    // });
-    //
+    test("should create a file on obsidian event 'create'", async (t) => {
+        const content = "lorem ipsum";
+        const filename = "create.md";
+        const filepath = `files/${filename}`;
+
+        const sendMessage = t.mock.method(wsClient, "sendMessage", () => {});
+
+        const filesPreInit = await apiClient.fetchFiles();
+        assert.equal(filesPreInit.length, 0);
+
+        // the file will exists before the event
+        await storage.write(filepath, content);
+        await syncinator.events.create({
+            name: filename,
+            path: filepath,
+            vault,
+            parent: null,
+        });
+
+        // checking cache
+        const files = await apiClient.fetchFiles();
+        assert.equal(files.length, 1);
+
+        assert.deepEqual(syncinator.cacheDump(), [
+            { ...files[0], content: content },
+        ]);
+
+        assert.strictEqual(sendMessage.mock.callCount(), 1);
+        assert.deepEqual(sendMessage.mock.calls[0].arguments[0], {
+            type: MessageType.Create,
+            objectType: "file",
+            fileId: files[0].id,
+            workspacePath: filepath,
+        } as EventMessage);
+    });
+
+    test("should delete a file on obsidian event 'delete'", async (t) => {
+        const content = "lorem ipsum";
+        const filename = "create.md";
+        const filepath = `files/${filename}`;
+
+        const sendMessage = t.mock.method(wsClient, "sendMessage", () => {});
+
+        const onlineFile = await apiClient.createFile(filepath, content);
+        await storage.write(filepath, content);
+
+        const filesPreInit = await apiClient.fetchFiles();
+        assert.equal(filesPreInit.length, 1);
+
+        // loading cache
+        await syncinator.init();
+
+        await syncinator.events.delete({
+            name: filename,
+            path: filepath,
+            vault,
+            parent: null,
+        });
+
+        // checking cache
+        const files = await apiClient.fetchFiles();
+        assert.equal(files.length, 0);
+
+        assert.deepEqual(syncinator.cacheDump(), []);
+
+        assert.strictEqual(sendMessage.mock.callCount(), 1);
+        assert.deepEqual(sendMessage.mock.calls[0].arguments[0], {
+            type: MessageType.Delete,
+            objectType: "file",
+            fileId: onlineFile.id,
+            workspacePath: filepath,
+        } as EventMessage);
+    });
+
     // test("should delete a folder on obsidian event 'delete'", async (t) => {
     // 	const now = new Date().toISOString();
     // 	const deleteFile = t.mock.method(apiClient, "deleteFile", () => { });
