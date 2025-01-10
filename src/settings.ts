@@ -35,6 +35,8 @@ export class SettingTab extends PluginSettingTab {
 
         containerEl.empty();
 
+        createInfoBox(containerEl);
+
         new Setting(containerEl)
             .setName("Server URL")
             .setDesc("Server to connect")
@@ -123,4 +125,18 @@ export class SettingTab extends PluginSettingTab {
                 }),
         );
     }
+}
+
+function createInfoBox(parentEl: HTMLElement): HTMLElement {
+    const infoBox = parentEl.createDiv({
+        text: "To configure correctly the plugin follow the repository readme at ",
+    });
+    infoBox.createEl("a", {
+        text: "obsidian-live-syncinator",
+        href: "https://github.com/hiimjako/obsidian-live-syncinator",
+    });
+    infoBox.appendText(".");
+    parentEl.createEl("br");
+
+    return infoBox;
 }

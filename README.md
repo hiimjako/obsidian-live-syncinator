@@ -19,3 +19,4 @@ To test this plugin:
 - Fix consistency on startup, to align local offline changes
 - Add cursor of other clients
 - Add heartbeat on ws connection
+- fix file save, sometimes a text file is saved as binary
