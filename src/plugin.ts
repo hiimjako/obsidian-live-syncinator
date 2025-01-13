@@ -417,45 +417,42 @@ export class Syncinator {
 
     private async modify(file: TAbstractFile) {
         log.debug("[event]: modify", file);
-        const currentFile = this.fileCache.getByPath(file.path);
-        if (currentFile == null) {
+        const cachedFile = this.fileCache.getByPath(file.path);
+        if (cachedFile == null) {
             log.error(`file '${file.path}' not found`);
             return;
         }
-        const fileId = currentFile.id;
 
-        if (this.lockedFiles.has(fileId)) {
-            // FIXME: with this method if another client continues to write I will never
-            // acquire the lock
+        // FIXME: with this method if another client continues to write I will never
+        // acquire the lock
+        if (this.lockedFiles.has(cachedFile.id)) {
             return;
         }
 
-        if (!isTextFile(currentFile.mimeType) || typeof currentFile.content !== "string") {
+        if (!isTextFile(cachedFile.mimeType) || typeof cachedFile.content !== "string") {
             return;
         }
 
         const newContent = await this.storage.readText(file.path);
-        const chunks = computeDiff(currentFile.content, newContent);
+        const chunks = computeDiff(cachedFile.content, newContent);
 
-        const oldContent = currentFile.content;
-        currentFile.content = newContent;
-        this.fileCache.setById(fileId, currentFile);
+        cachedFile.content = newContent;
+        this.fileCache.setById(cachedFile.id, cachedFile);
 
         if (chunks.length > 0) {
             log.debug("modify", {
-                fileId,
+                fileId: cachedFile.id,
                 chunks,
-                oldContent,
                 newContent,
             });
 
             const msg: ChunkMessage = {
                 type: MessageType.Chunk,
-                fileId,
+                fileId: cachedFile.id,
                 chunks,
-                version: currentFile.version,
+                version: cachedFile.version,
             };
-            this.messageQueueRegistry.getDeque(fileId).addBack(msg);
+            this.messageQueueRegistry.getDeque(cachedFile.id).addBack(msg);
             this.wsClient.sendMessage(msg);
         }
     }
