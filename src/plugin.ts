@@ -333,6 +333,7 @@ export class Syncinator {
                     return;
                 }
                 this.storage.delete(file.workspacePath, { force: true });
+                this.fileCache.deleteById(file.id);
             } else if (event.objectType === "folder") {
                 const files = await this.storage.listFiles({
                     prefix: event.workspacePath,

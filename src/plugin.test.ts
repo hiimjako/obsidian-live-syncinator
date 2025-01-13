@@ -10,7 +10,6 @@ import { computeDiff } from "./diff";
 import { Syncinator } from "./plugin";
 import { Disk } from "./storage/storage";
 import { CreateVaultMock } from "./storage/storage.mock";
-import { toUnicode } from "node:punycode";
 
 async function assertEventually(
     assertion: () => Promise<void>,
@@ -554,48 +553,34 @@ describe("Plugin integration tests", () => {
             });
         });
 
-        // test("should delete a file on obsidian event 'delete'", async (t) => {
-        //     const content = "lorem ipsum";
-        //     const filename = "create.md";
-        //     const filepath = `files/${filename}`;
-        //
-        //     const sendMessage = t.mock.method(
-        //         wsClient,
-        //         "sendMessage",
-        //         () => {},
-        //     );
-        //
-        //     const onlineFile = await apiClient.createFile(filepath, content);
-        //     await storage.write(filepath, content);
-        //
-        //     const filesPreInit = await apiClient.fetchFiles();
-        //     assert.equal(filesPreInit.length, 1);
-        //
-        //     // loading cache
-        //     await syncinator.init();
-        //
-        //     await syncinator.events.delete({
-        //         name: filename,
-        //         path: filepath,
-        //         vault,
-        //         parent: null,
-        //     });
-        //
-        //     // checking cache
-        //     const files = await apiClient.fetchFiles();
-        //     assert.equal(files.length, 0);
-        //
-        //     assert.deepEqual(syncinator.cacheDump(), []);
-        //
-        //     assert.strictEqual(sendMessage.mock.callCount(), 1);
-        //     assert.deepEqual(sendMessage.mock.calls[0].arguments[0], {
-        //         type: MessageType.Delete,
-        //         objectType: "file",
-        //         fileId: onlineFile.id,
-        //         workspacePath: filepath,
-        //     } as EventMessage);
-        // });
-        //
+        test("should delete a file on 'delete'", async (_t) => {
+            const content = "lorem ipsum";
+            const filepath = "files/create.md";
+
+            const file = await apiClient.createFile(filepath, content);
+            await storage.write(filepath, content);
+
+            // loading cache
+            await syncinator.init();
+
+            assert.equal(syncinator.cacheDump().length, 1);
+
+            await syncinator.onEventMessage({
+                type: MessageType.Delete,
+                fileId: file.id,
+                objectType: "file",
+                workspacePath: filepath,
+            });
+
+            // checking cache
+            assert.deepEqual(syncinator.cacheDump(), []);
+
+            await assertEventually(async () => {
+                const exists = await storage.exists(filepath);
+                assert.equal(exists, false);
+            });
+        });
+
         // test("should delete a folder on obsidian event 'delete'", async (t) => {
         //     const sendMessage = t.mock.method(
         //         wsClient,
