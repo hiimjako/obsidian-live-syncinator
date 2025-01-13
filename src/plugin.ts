@@ -68,17 +68,14 @@ export class Syncinator {
     async pushLocalFiles() {
         const files = await this.storage.listFiles();
 
-        for (const file of files) {
+        const filesToPush = files.map(async (file) => {
             if (this.fileCache.hasByPath(file.path)) {
-                continue;
+                return;
             }
 
             const currentContent = await this.storage.read(file.path);
             const fileApi = await this.apiClient.createFile(file.path, currentContent);
-            this.fileCache.create({
-                ...fileApi,
-                content: currentContent,
-            });
+            this.fileCache.create({ ...fileApi, content: currentContent });
 
             const msg: EventMessage = {
                 type: MessageType.Create,
@@ -87,7 +84,9 @@ export class Syncinator {
                 workspacePath: fileApi.workspacePath,
             };
             this.wsClient.sendMessage(msg);
-        }
+        });
+
+        await Promise.allSettled(filesToPush);
     }
 
     /**
@@ -580,7 +579,7 @@ export class Syncinator {
     // ---------- END ---------
 
     cacheDump() {
-        return this.fileCache.dump();
+        return this.fileCache.dump().sort((a, b) => a.id - b.id);
     }
 }
 
