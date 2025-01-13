@@ -484,15 +484,16 @@ export class Syncinator {
         };
 
         const fileToDelete = this.fileCache.getByPath(file.path);
-        if (fileToDelete === undefined) {
-            log.error(`missing file for deletion: "${file.path}", probably a folder`);
+        if (fileToDelete) {
+            await deleteFile(fileToDelete.id);
+        } else {
+            log.warn(`missing file for deletion: "${file.path}", probably a folder`);
 
-            const files = this.fileCache.find((f) =>
-                f.workspacePath.startsWith(file.path + path.sep),
+            await Promise.all(
+                this.fileCache
+                    .find((f) => f.workspacePath.startsWith(file.path + path.sep))
+                    .map((f) => deleteFile(f.id)),
             );
-            for (const fileToDelete of files) {
-                await deleteFile(fileToDelete.id);
-            }
 
             const msg: EventMessage = {
                 type: MessageType.Delete,
@@ -501,10 +502,7 @@ export class Syncinator {
                 workspacePath: file.path,
             };
             this.wsClient.sendMessage(msg);
-            return;
         }
-
-        await deleteFile(fileToDelete.id);
     }
 
     private async rename(file: TAbstractFile, oldPath: string) {
