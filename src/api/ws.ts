@@ -1,5 +1,5 @@
 import { log } from "src/logger/logger";
-import type { DiffChunk } from "../diff";
+import type { DiffChunk } from "../diff/diff";
 
 export enum MessageType {
     Chunk = 0,

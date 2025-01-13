@@ -5,8 +5,8 @@ import {
     applyDiff,
     computeDiff,
     invertDiff as inverseDiff,
-} from "./diff";
-import type { DiffChunk } from "./diff";
+} from "../diff/diff";
+import type { DiffChunk } from "../diff/diff";
 
 describe("compute diff should be compliant with server implemenation", () => {
     const testCases = [

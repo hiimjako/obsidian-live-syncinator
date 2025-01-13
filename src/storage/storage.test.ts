@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import fs from "node:fs/promises";
 import { afterEach, beforeEach, describe, mock, it as test } from "node:test";
 import type { Vault } from "obsidian";
-import { computeDiff } from "../diff";
+import { computeDiff } from "../diff/diff";
 import { Disk } from "../storage/storage";
 import { CreateVaultMock } from "../storage/storage.mock";
 

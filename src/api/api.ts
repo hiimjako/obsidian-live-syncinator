@@ -1,6 +1,6 @@
 import { StatusCodes } from "http-status-codes";
 import path from "path-browserify";
-import type { DiffChunk } from "src/diff";
+import type { DiffChunk } from "src/diff/diff";
 import type { HttpClient } from "./http";
 import { Multipart } from "./multipart";
 

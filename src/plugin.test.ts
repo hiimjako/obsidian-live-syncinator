@@ -6,7 +6,7 @@ import type { Vault } from "obsidian";
 import { ApiClient, type WorkspaceCredentials } from "./api/api";
 import { HttpClient } from "./api/http";
 import { type EventMessage, MessageType, WsClient } from "./api/ws";
-import { computeDiff } from "./diff";
+import { computeDiff } from "./diff/diff";
 import { Syncinator } from "./plugin";
 import { Disk } from "./storage/storage";
 import { CreateVaultMock } from "./storage/storage.mock";

@@ -9,7 +9,7 @@ import {
     type WsClient,
 } from "./api/ws";
 import { FileCache } from "./cache";
-import { type DiffChunk, computeDiff, invertDiff } from "./diff";
+import { type DiffChunk, computeDiff, invertDiff } from "./diff/diff";
 import { DequeRegistry } from "./messageQueue";
 import { isText } from "./storage/filetype";
 import type { Disk } from "./storage/storage";

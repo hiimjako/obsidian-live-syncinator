@@ -2,7 +2,7 @@ import assert from "node:assert";
 import { afterEach, beforeEach, describe, test } from "node:test";
 import getPort from "get-port";
 import WebSocket from "ws";
-import { Operation } from "../diff";
+import { Operation } from "../diff/diff";
 import { MessageType, WsClient } from "./ws";
 import type { ChunkMessage } from "./ws";
 
