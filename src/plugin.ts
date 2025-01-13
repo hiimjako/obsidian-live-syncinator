@@ -338,13 +338,10 @@ export class Syncinator {
                 const files = await this.storage.listFiles({
                     prefix: event.workspacePath,
                 });
-                if (files.length > 1) {
-                    // FIXME: check if it is only an edge case, given that it should
-                    // be the last event in a folder deletion.
-                    // The files should be already deleted.
-                    log.error("[soket] trying to delete not empty folder");
-                    return;
+                for (const file of files) {
+                    this.fileCache.deleteByPath(file.path);
                 }
+
                 this.storage.delete(event.workspacePath, { force: true });
             } else {
                 log.error("[socket] unknown", event);

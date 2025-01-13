@@ -581,77 +581,60 @@ describe("Plugin integration tests", () => {
             });
         });
 
-        // test("should delete a folder on obsidian event 'delete'", async (t) => {
-        //     const sendMessage = t.mock.method(
-        //         wsClient,
-        //         "sendMessage",
-        //         () => {},
-        //     );
-        //     const filesToCreate = [
-        //         {
-        //             content: "lorem ipsum 1",
-        //             filename: "fileToDelete1.md",
-        //             filepath: "folderToDelete/fileToDelete1.md",
-        //         },
-        //         {
-        //             content: "lorem ipsum 2",
-        //             filename: "fileToDelete2.md",
-        //             filepath: "folderToDelete/fileToDelete2.md",
-        //         },
-        //         {
-        //             content: "lorem ipsum 3",
-        //             filename: "file.md",
-        //             filepath: "file.md",
-        //         },
-        //     ];
-        //
-        //     for (const file of filesToCreate) {
-        //         await storage.write(file.filepath, file.content);
-        //         await apiClient.createFile(file.filepath, file.content);
-        //     }
-        //
-        //     const filesPreInit = await apiClient.fetchFiles();
-        //     assert.equal(filesPreInit.length, 3);
-        //
-        //     // loading cache
-        //     await syncinator.init();
-        //
-        //     await syncinator.events.delete({
-        //         name: "folderToDelete",
-        //         path: "folderToDelete",
-        //         vault,
-        //         parent: null,
-        //     });
-        //
-        //     // checking cache
-        //     const files = await apiClient.fetchFiles();
-        //     assert.equal(files.length, 1);
-        //
-        //     assert.deepEqual(syncinator.cacheDump(), [
-        //         { ...files[0], content: "lorem ipsum 3" },
-        //     ]);
-        //
-        //     assert.strictEqual(sendMessage.mock.callCount(), 3);
-        //     assert.deepEqual(sendMessage.mock.calls[0].arguments[0], {
-        //         type: MessageType.Delete,
-        //         objectType: "file",
-        //         fileId: filesPreInit[0].id,
-        //         workspacePath: filesPreInit[0].workspacePath,
-        //     } as EventMessage);
-        //     assert.deepEqual(sendMessage.mock.calls[1].arguments[0], {
-        //         type: MessageType.Delete,
-        //         objectType: "file",
-        //         fileId: filesPreInit[1].id,
-        //         workspacePath: filesPreInit[1].workspacePath,
-        //     } as EventMessage);
-        //     assert.deepEqual(sendMessage.mock.calls[2].arguments[0], {
-        //         type: MessageType.Delete,
-        //         objectType: "folder",
-        //         fileId: 0,
-        //         workspacePath: "folderToDelete",
-        //     } as EventMessage);
-        // });
-        //
+        test("should delete a folder on 'delete'", async (_t) => {
+            const folderToDelete = "folderToDelete/";
+            const filesToCreate = [
+                {
+                    content: "lorem ipsum 1",
+                    filepath: `${folderToDelete}fileToDelete1.md`,
+                    shouldExists: false,
+                },
+                {
+                    content: "lorem ipsum 2",
+                    filepath: `${folderToDelete}fileToDelete2.md`,
+                    shouldExists: false,
+                },
+                {
+                    content: "lorem ipsum 3",
+                    filepath: "file.md",
+                    shouldExists: true,
+                },
+            ];
+
+            let notDeletedFile = null;
+            for (const file of filesToCreate) {
+                await storage.write(file.filepath, file.content);
+                notDeletedFile = await apiClient.createFile(
+                    file.filepath,
+                    file.content,
+                );
+            }
+
+            // loading cache
+            await syncinator.init();
+
+            assert.equal(syncinator.cacheDump().length, 3);
+
+            await syncinator.onEventMessage({
+                type: MessageType.Delete,
+                objectType: "folder",
+                fileId: 0, // not used
+                workspacePath: folderToDelete,
+            });
+
+            // checking cache
+            assert.deepEqual(syncinator.cacheDump(), [
+                { ...notDeletedFile, content: "lorem ipsum 3" },
+            ]);
+
+            await assertEventually(async () => {
+                for (const file of filesToCreate) {
+                    const exists = await storage.exists(file.filepath);
+                    assert.equal(exists, file.shouldExists);
+                }
+            });
+        });
+
         // test("should rename a file on obsidian event 'rename'", async (t) => {
         //     const content = "lorem ipsum";
         //     const oldFilename = "rename.md";
