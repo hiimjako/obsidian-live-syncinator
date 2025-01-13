@@ -2,7 +2,6 @@ import assert from "node:assert";
 import { execSync } from "node:child_process";
 import fs from "node:fs/promises";
 import { afterEach, beforeEach, describe, mock, test } from "node:test";
-import { promisify } from "node:util";
 import type { Vault } from "obsidian";
 import { ApiClient, type WorkspaceCredentials } from "./api/api";
 import { HttpClient } from "./api/http";
@@ -11,7 +10,27 @@ import { computeDiff } from "./diff";
 import { Syncinator } from "./plugin";
 import { Disk } from "./storage/storage";
 import { CreateVaultMock } from "./storage/storage.mock";
-const _sleep = promisify(setTimeout);
+import { toUnicode } from "node:punycode";
+
+async function assertEventually(
+    assertion: () => Promise<void>,
+    timeout = 5000,
+    interval = 100,
+) {
+    const startTime = Date.now();
+
+    while (Date.now() - startTime < timeout) {
+        try {
+            await assertion();
+            return;
+        } catch (_) {
+            await new Promise((resolve) => setTimeout(resolve, interval));
+        }
+    }
+
+    // One final try before failing
+    await assertion();
+}
 
 function createNewUser(): WorkspaceCredentials {
     const name = Math.random().toString(36).slice(2);
@@ -458,7 +477,7 @@ describe("Plugin integration tests", () => {
     });
 
     describe("ws events", () => {
-        test("should write a new chunk coming from ws", async (_t) => {
+        test("should write a new chunk on 'modify'", async () => {
             const content = "lorem ipsum";
             const newContent = "lorem bar ipsum";
             const filepath = "files/file.md";
@@ -488,5 +507,288 @@ describe("Plugin integration tests", () => {
                 { ...files[0], content: newContent },
             ]);
         });
+
+        test("should create a file on 'create'", async (_t) => {
+            const content = "lorem ipsum";
+            const filepath = "files/file.md";
+
+            const createdFile = await apiClient.createFile(filepath, content);
+
+            assert.deepEqual(syncinator.cacheDump(), []);
+
+            await syncinator.onEventMessage({
+                type: MessageType.Create,
+                fileId: createdFile.id,
+                objectType: "file",
+                workspacePath: filepath,
+            });
+
+            assert.deepEqual(syncinator.cacheDump(), [
+                { ...createdFile, content },
+            ]);
+
+            await assertEventually(async () => {
+                const diskContent = await storage.readText(filepath);
+                assert.equal(diskContent, content);
+            });
+        });
+
+        test("should create a folder on 'create'", async (_t) => {
+            const folder = "files/";
+
+            const exists = await storage.exists(folder);
+            assert.equal(exists, false);
+
+            await syncinator.onEventMessage({
+                type: MessageType.Create,
+                fileId: 0, // not used yet
+                objectType: "folder",
+                workspacePath: folder,
+            });
+
+            assert.deepEqual(syncinator.cacheDump(), []);
+
+            await assertEventually(async () => {
+                const exists = await storage.exists(folder);
+                assert.equal(exists, true);
+            });
+        });
+
+        // test("should delete a file on obsidian event 'delete'", async (t) => {
+        //     const content = "lorem ipsum";
+        //     const filename = "create.md";
+        //     const filepath = `files/${filename}`;
+        //
+        //     const sendMessage = t.mock.method(
+        //         wsClient,
+        //         "sendMessage",
+        //         () => {},
+        //     );
+        //
+        //     const onlineFile = await apiClient.createFile(filepath, content);
+        //     await storage.write(filepath, content);
+        //
+        //     const filesPreInit = await apiClient.fetchFiles();
+        //     assert.equal(filesPreInit.length, 1);
+        //
+        //     // loading cache
+        //     await syncinator.init();
+        //
+        //     await syncinator.events.delete({
+        //         name: filename,
+        //         path: filepath,
+        //         vault,
+        //         parent: null,
+        //     });
+        //
+        //     // checking cache
+        //     const files = await apiClient.fetchFiles();
+        //     assert.equal(files.length, 0);
+        //
+        //     assert.deepEqual(syncinator.cacheDump(), []);
+        //
+        //     assert.strictEqual(sendMessage.mock.callCount(), 1);
+        //     assert.deepEqual(sendMessage.mock.calls[0].arguments[0], {
+        //         type: MessageType.Delete,
+        //         objectType: "file",
+        //         fileId: onlineFile.id,
+        //         workspacePath: filepath,
+        //     } as EventMessage);
+        // });
+        //
+        // test("should delete a folder on obsidian event 'delete'", async (t) => {
+        //     const sendMessage = t.mock.method(
+        //         wsClient,
+        //         "sendMessage",
+        //         () => {},
+        //     );
+        //     const filesToCreate = [
+        //         {
+        //             content: "lorem ipsum 1",
+        //             filename: "fileToDelete1.md",
+        //             filepath: "folderToDelete/fileToDelete1.md",
+        //         },
+        //         {
+        //             content: "lorem ipsum 2",
+        //             filename: "fileToDelete2.md",
+        //             filepath: "folderToDelete/fileToDelete2.md",
+        //         },
+        //         {
+        //             content: "lorem ipsum 3",
+        //             filename: "file.md",
+        //             filepath: "file.md",
+        //         },
+        //     ];
+        //
+        //     for (const file of filesToCreate) {
+        //         await storage.write(file.filepath, file.content);
+        //         await apiClient.createFile(file.filepath, file.content);
+        //     }
+        //
+        //     const filesPreInit = await apiClient.fetchFiles();
+        //     assert.equal(filesPreInit.length, 3);
+        //
+        //     // loading cache
+        //     await syncinator.init();
+        //
+        //     await syncinator.events.delete({
+        //         name: "folderToDelete",
+        //         path: "folderToDelete",
+        //         vault,
+        //         parent: null,
+        //     });
+        //
+        //     // checking cache
+        //     const files = await apiClient.fetchFiles();
+        //     assert.equal(files.length, 1);
+        //
+        //     assert.deepEqual(syncinator.cacheDump(), [
+        //         { ...files[0], content: "lorem ipsum 3" },
+        //     ]);
+        //
+        //     assert.strictEqual(sendMessage.mock.callCount(), 3);
+        //     assert.deepEqual(sendMessage.mock.calls[0].arguments[0], {
+        //         type: MessageType.Delete,
+        //         objectType: "file",
+        //         fileId: filesPreInit[0].id,
+        //         workspacePath: filesPreInit[0].workspacePath,
+        //     } as EventMessage);
+        //     assert.deepEqual(sendMessage.mock.calls[1].arguments[0], {
+        //         type: MessageType.Delete,
+        //         objectType: "file",
+        //         fileId: filesPreInit[1].id,
+        //         workspacePath: filesPreInit[1].workspacePath,
+        //     } as EventMessage);
+        //     assert.deepEqual(sendMessage.mock.calls[2].arguments[0], {
+        //         type: MessageType.Delete,
+        //         objectType: "folder",
+        //         fileId: 0,
+        //         workspacePath: "folderToDelete",
+        //     } as EventMessage);
+        // });
+        //
+        // test("should rename a file on obsidian event 'rename'", async (t) => {
+        //     const content = "lorem ipsum";
+        //     const oldFilename = "rename.md";
+        //     const oldFilepath = `files/${oldFilename}`;
+        //     const newFilename = "newName.md";
+        //     const newFilepath = `files/${newFilename}`;
+        //
+        //     const sendMessage = t.mock.method(
+        //         wsClient,
+        //         "sendMessage",
+        //         () => {},
+        //     );
+        //
+        //     await apiClient.createFile(oldFilepath, content);
+        //     await storage.write(oldFilepath, content);
+        //
+        //     const filesPreInit = await apiClient.fetchFiles();
+        //     assert.equal(filesPreInit.length, 1);
+        //
+        //     // loading cache
+        //     await syncinator.init();
+        //
+        //     await syncinator.events.rename(
+        //         {
+        //             name: newFilename,
+        //             path: newFilepath,
+        //             vault,
+        //             parent: null,
+        //         },
+        //         oldFilepath,
+        //     );
+        //
+        //     // checking cache
+        //     const file = await apiClient.fetchFile(filesPreInit[0].id);
+        //     assert.equal(file.workspacePath, newFilepath);
+        //
+        //     assert.deepEqual(syncinator.cacheDump(), [{ ...file, content }]);
+        //
+        //     assert.strictEqual(sendMessage.mock.callCount(), 1);
+        //     assert.deepEqual(sendMessage.mock.calls[0].arguments[0], {
+        //         type: MessageType.Rename,
+        //         objectType: "file",
+        //         fileId: file.id,
+        //         workspacePath: oldFilepath,
+        //     } as EventMessage);
+        // });
+        //
+        // test("should rename a folder on obsidian event 'rename'", async (t) => {
+        //     const sendMessage = t.mock.method(
+        //         wsClient,
+        //         "sendMessage",
+        //         () => {},
+        //     );
+        //     const filesToCreate = [
+        //         {
+        //             content: "lorem ipsum 1",
+        //             oldFilename: "file1.md",
+        //             oldFilepath: "folderToRename/file1.md",
+        //             newFilename: "file1.md",
+        //             newFilepath: "renamedFolder/file1.md",
+        //         },
+        //         {
+        //             content: "lorem ipsum 2",
+        //             oldFilename: "file2.md",
+        //             oldFilepath: "folderToRename/file2.md",
+        //             newFilename: "file2.md",
+        //             newFilepath: "renamedFolder/file2.md",
+        //         },
+        //         {
+        //             content: "lorem ipsum 3",
+        //             oldFilename: "file.md",
+        //             oldFilepath: "file.md",
+        //             newFilename: "file.md",
+        //             newFilepath: "file.md",
+        //         },
+        //     ];
+        //
+        //     for (const file of filesToCreate) {
+        //         await storage.write(file.oldFilepath, file.content);
+        //         await apiClient.createFile(file.oldFilepath, file.content);
+        //     }
+        //
+        //     const filesPreInit = await apiClient.fetchFiles();
+        //     assert.equal(filesPreInit.length, 3);
+        //
+        //     // loading cache
+        //     await syncinator.init();
+        //
+        //     await syncinator.events.rename(
+        //         {
+        //             name: "renamedFolder",
+        //             path: "renamedFolder",
+        //             vault,
+        //             parent: null,
+        //         },
+        //         "folderToRename",
+        //     );
+        //
+        //     // checking cache
+        //     const files = await apiClient.fetchFiles();
+        //     assert.equal(files.length, 3);
+        //
+        //     for (let i = 0; i < files.length; i++) {
+        //         assert.equal(
+        //             files[i].workspacePath,
+        //             filesToCreate[i].newFilepath,
+        //         );
+        //     }
+        //
+        //     assert.deepEqual(syncinator.cacheDump(), [
+        //         { ...files[0], content: "lorem ipsum 1" },
+        //         { ...files[1], content: "lorem ipsum 2" },
+        //         { ...files[2], content: "lorem ipsum 3" },
+        //     ]);
+        //
+        //     assert.strictEqual(sendMessage.mock.callCount(), 1);
+        //     assert.deepEqual(sendMessage.mock.calls[0].arguments[0], {
+        //         type: MessageType.Rename,
+        //         objectType: "folder",
+        //         fileId: 0,
+        //         workspacePath: "folderToRename",
+        //     } as EventMessage);
+        // });
     });
 });

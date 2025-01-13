@@ -21,7 +21,6 @@ export interface ChunkMessage extends MessageHeader {
 export interface EventMessage extends MessageHeader {
     workspacePath: string;
     objectType: "file" | "folder";
-    fetchFromRemote?: boolean;
 }
 
 type Options = {
@@ -205,7 +204,7 @@ class AsyncMessageQueue<T> {
 
     constructor(private readonly processor: (data: T) => Promise<void>) {}
 
-    public enqueue(data: T): void {
+    enqueue(data: T): void {
         const queueItem: QueueItem<T> = {
             data,
             timestamp: Date.now(),
@@ -218,11 +217,11 @@ class AsyncMessageQueue<T> {
         }
     }
 
-    public size(): number {
+    size(): number {
         return this.queue.length;
     }
 
-    public clear(): void {
+    clear(): void {
         this.queue = [];
     }
 
