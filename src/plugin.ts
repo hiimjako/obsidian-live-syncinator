@@ -489,7 +489,7 @@ export class Syncinator {
         } else {
             log.warn(`missing file for deletion: "${file.path}", probably a folder`);
 
-            await Promise.all(
+            await Promise.allSettled(
                 this.fileCache
                     .find((f) => f.workspacePath.startsWith(file.path + path.sep))
                     .map((f) => deleteFile(f.id)),
@@ -508,51 +508,51 @@ export class Syncinator {
     private async rename(file: TAbstractFile, oldPath: string) {
         log.debug("[event]: rename", oldPath, file);
         const fileToRename = this.fileCache.getByPath(oldPath);
-        if (fileToRename === undefined) {
-            log.error(`missing file for rename: "${oldPath}", probably a folder`);
+        if (fileToRename) {
+            try {
+                await this.apiClient.updateFile(fileToRename.id, file.path);
+                this.fileCache.setPath(fileToRename.id, file.path);
 
-            const oldWorkspacePath = oldPath + path.sep;
-            const folderFiles = await this.storage.listFiles({
-                prefix: oldWorkspacePath,
-            });
-            if (folderFiles.length === 0) {
-                log.error("[socket] trying to rename not existing folder");
+                const msg: EventMessage = {
+                    type: MessageType.Rename,
+                    fileId: fileToRename.id,
+                    objectType: "file",
+                    workspacePath: oldPath,
+                };
+                this.wsClient.sendMessage(msg);
+            } catch (error) {
+                log.error(error);
                 return;
             }
+        } else {
+            log.warn(`missing file for rename: "${oldPath}", probably a folder`);
+            const oldWorkspacePath = oldPath.endsWith(path.sep) ? oldPath : oldPath + path.sep;
 
-            for (const folderFile of folderFiles) {
-                const fileDesc = this.fileCache.getByPath(folderFile.path);
-                if (!fileDesc) {
-                    continue;
-                }
+            const folderFiles = await this.storage.listFiles({ prefix: oldWorkspacePath });
 
-                const oldFilePath = fileDesc.workspacePath;
-                // FIXME: to validate, if it is always safe
+            const renamePromises = folderFiles.map(async (folderFile) => {
+                const fileToRename = this.fileCache.getByPath(folderFile.path);
+                if (!fileToRename) return;
+
+                const oldFilePath = fileToRename.workspacePath;
                 const newFilePath = oldFilePath.replace(oldPath, file.path);
 
                 try {
-                    const updatedFile = await this.apiClient.updateFile(fileDesc.id, newFilePath);
-                    this.fileCache.setUpdatedAt(fileDesc.id, updatedFile.updatedAt);
-                    this.fileCache.setPath(fileDesc.id, updatedFile.workspacePath);
+                    const updatedFile = await this.apiClient.updateFile(
+                        fileToRename.id,
+                        newFilePath,
+                    );
+
+                    // Update cache and storage with the new file path
+                    this.fileCache.setUpdatedAt(fileToRename.id, updatedFile.updatedAt);
+                    this.fileCache.setPath(fileToRename.id, updatedFile.workspacePath);
                     this.storage.rename(oldFilePath, updatedFile.workspacePath);
                 } catch (error) {
-                    log.error(error);
+                    log.error(`Failed to update file "${fileToRename.id}": ${error.message}`);
                 }
-            }
+            });
 
-            // give time to obsidian to update cache
-            for (let i = 0; i < 10; i++) {
-                const filesPostRename = await this.storage.listFiles({
-                    prefix: oldWorkspacePath,
-                });
-                if (filesPostRename.length === 0) {
-                    this.storage.delete(oldPath, {
-                        force: true,
-                    });
-                    break;
-                }
-                await sleep(100);
-            }
+            await Promise.allSettled(renamePromises);
 
             const msg: EventMessage = {
                 type: MessageType.Rename,
@@ -562,24 +562,15 @@ export class Syncinator {
             };
             this.wsClient.sendMessage(msg);
 
-            return;
-        }
-
-        try {
-            await this.apiClient.updateFile(fileToRename.id, file.path);
-            this.fileCache.setPath(fileToRename.id, file.path);
-
-            // First we create the file so the other clients can fetch it on event
-            const msg: EventMessage = {
-                type: MessageType.Rename,
-                fileId: fileToRename.id,
-                objectType: "file",
-                workspacePath: oldPath,
-            };
-            this.wsClient.sendMessage(msg);
-        } catch (error) {
-            log.error(error);
-            return;
+            // give time to obsidian to update cache
+            for (let i = 0; i < 10; i++) {
+                const filesPostRename = await this.storage.listFiles({ prefix: oldWorkspacePath });
+                if (filesPostRename.length === 0) {
+                    this.storage.delete(oldPath, { force: true });
+                    break;
+                }
+                await sleep(100);
+            }
         }
     }
     // ---------- END ---------
