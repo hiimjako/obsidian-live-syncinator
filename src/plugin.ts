@@ -249,10 +249,9 @@ export class Syncinator {
                 }
 
                 if (currVersion + 1 !== operation.version) {
-                    log.error(
+                    throw new Error(
                         `Missing operation in history for file ${file.workspacePath} ${fileId}`,
                     );
-                    return [];
                 }
 
                 chunksToPersist.push(...operation.operation);
@@ -368,6 +367,7 @@ export class Syncinator {
     }
 
     async handleEventMessage(event: EventMessage) {
+        log.debug("[socket]: message", event);
         switch (event.type) {
             case MessageType.Create:
                 await this.handleCreateEvent(event);
@@ -384,7 +384,7 @@ export class Syncinator {
     }
     // ---------- END ---------
 
-    // FIXME: avoid to trigger again create on ws event
+    // ---------- Obsidian events ---------
     private async create(file: TAbstractFile) {
         log.debug("[event]: create", file);
         if (this.fileCache.hasByPath(file.path)) {
@@ -411,10 +411,7 @@ export class Syncinator {
                 currentContent = await this.storage.readBinary(file.path);
             }
             const fileApi = await this.apiClient.createFile(file.path, currentContent);
-            this.fileCache.create({
-                ...fileApi,
-                content: currentContent,
-            });
+            this.fileCache.create({ ...fileApi, content: currentContent });
 
             const msg: EventMessage = {
                 type: MessageType.Create,
@@ -473,7 +470,6 @@ export class Syncinator {
         }
     }
 
-    // FIXME: avoid to trigger again delete on ws event
     private async delete(file: TAbstractFile) {
         log.debug("[event]: delete", file);
 
@@ -524,7 +520,6 @@ export class Syncinator {
         await deleteFile(fileToDelete.id);
     }
 
-    // FIXME: avoid to trigger again rename on ws event
     private async rename(file: TAbstractFile, oldPath: string) {
         log.debug("[event]: rename", oldPath, file);
         const fileToRename = this.fileCache.getByPath(oldPath);
@@ -602,6 +597,7 @@ export class Syncinator {
             return;
         }
     }
+    // ---------- END ---------
 
     cacheDump() {
         return this.fileCache.dump();

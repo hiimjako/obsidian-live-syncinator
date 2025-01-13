@@ -169,7 +169,7 @@ describe("Plugin integration tests", () => {
     });
 
     describe("obsidian events", () => {
-        test("should create a file on obsidian event 'create'", async (t) => {
+        test("should create a file event 'create'", async (t) => {
             const content = "lorem ipsum";
             const filename = "create.md";
             const filepath = `files/${filename}`;
@@ -203,7 +203,34 @@ describe("Plugin integration tests", () => {
             } as EventMessage);
         });
 
-        test("should delete a file on obsidian event 'delete'", async (t) => {
+        test("should send an event on folder 'create'", async (t) => {
+            const filepath = "files/";
+
+            const sendMessage = t.mock.method(wsClient, "sendMessage", () => {});
+
+            // the file will exists before the event
+            await storage.write(filepath, "", { isDir: true });
+            await syncinator.events.create({
+                name: filepath,
+                path: filepath,
+                vault,
+                parent: null,
+            });
+
+            // checking cache
+            assert.deepEqual(syncinator.cacheDump(), []);
+            assert.equal(await storage.listFiles(), 0);
+
+            assert.strictEqual(sendMessage.mock.callCount(), 1);
+            assert.deepEqual(sendMessage.mock.calls[0].arguments[0], {
+                type: MessageType.Create,
+                objectType: "folder",
+                fileId: 0,
+                workspacePath: filepath,
+            } as EventMessage);
+        });
+
+        test("should delete a file on event 'delete'", async (t) => {
             const content = "lorem ipsum";
             const filename = "create.md";
             const filepath = `files/${filename}`;
@@ -241,7 +268,7 @@ describe("Plugin integration tests", () => {
             } as EventMessage);
         });
 
-        test("should delete a folder on obsidian event 'delete'", async (t) => {
+        test("should delete a folder on event 'delete'", async (t) => {
             const sendMessage = t.mock.method(wsClient, "sendMessage", () => {});
             const filesToCreate = [
                 {
@@ -306,7 +333,7 @@ describe("Plugin integration tests", () => {
             } as EventMessage);
         });
 
-        test("should rename a file on obsidian event 'rename'", async (t) => {
+        test("should rename a file on event 'rename'", async (t) => {
             const content = "lorem ipsum";
             const oldFilename = "rename.md";
             const oldFilepath = `files/${oldFilename}`;
@@ -349,7 +376,7 @@ describe("Plugin integration tests", () => {
             } as EventMessage);
         });
 
-        test("should rename a folder on obsidian event 'rename'", async (t) => {
+        test("should rename a folder on event 'rename'", async (t) => {
             const sendMessage = t.mock.method(wsClient, "sendMessage", () => {});
             const filesToCreate = [
                 {
