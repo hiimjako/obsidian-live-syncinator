@@ -582,16 +582,16 @@ describe("Plugin integration tests", () => {
         });
 
         test("should delete a folder on 'delete'", async (_t) => {
-            const folderToDelete = "folderToDelete/";
+            const folderToDelete = "folderToDelete";
             const filesToCreate = [
                 {
                     content: "lorem ipsum 1",
-                    filepath: `${folderToDelete}fileToDelete1.md`,
+                    filepath: `${folderToDelete}/fileToDelete1.md`,
                     shouldExists: false,
                 },
                 {
                     content: "lorem ipsum 2",
-                    filepath: `${folderToDelete}fileToDelete2.md`,
+                    filepath: `${folderToDelete}/fileToDelete2.md`,
                     shouldExists: false,
                 },
                 {
@@ -664,81 +664,62 @@ describe("Plugin integration tests", () => {
             ]);
         });
 
-        // test("should rename a folder on obsidian event 'rename'", async (t) => {
-        //     const sendMessage = t.mock.method(
-        //         wsClient,
-        //         "sendMessage",
-        //         () => {},
-        //     );
-        //     const filesToCreate = [
-        //         {
-        //             content: "lorem ipsum 1",
-        //             oldFilename: "file1.md",
-        //             oldFilepath: "folderToRename/file1.md",
-        //             newFilename: "file1.md",
-        //             newFilepath: "renamedFolder/file1.md",
-        //         },
-        //         {
-        //             content: "lorem ipsum 2",
-        //             oldFilename: "file2.md",
-        //             oldFilepath: "folderToRename/file2.md",
-        //             newFilename: "file2.md",
-        //             newFilepath: "renamedFolder/file2.md",
-        //         },
-        //         {
-        //             content: "lorem ipsum 3",
-        //             oldFilename: "file.md",
-        //             oldFilepath: "file.md",
-        //             newFilename: "file.md",
-        //             newFilepath: "file.md",
-        //         },
-        //     ];
-        //
-        //     for (const file of filesToCreate) {
-        //         await storage.write(file.oldFilepath, file.content);
-        //         await apiClient.createFile(file.oldFilepath, file.content);
-        //     }
-        //
-        //     const filesPreInit = await apiClient.fetchFiles();
-        //     assert.equal(filesPreInit.length, 3);
-        //
-        //     // loading cache
-        //     await syncinator.init();
-        //
-        //     await syncinator.events.rename(
-        //         {
-        //             name: "renamedFolder",
-        //             path: "renamedFolder",
-        //             vault,
-        //             parent: null,
-        //         },
-        //         "folderToRename",
-        //     );
-        //
-        //     // checking cache
-        //     const files = await apiClient.fetchFiles();
-        //     assert.equal(files.length, 3);
-        //
-        //     for (let i = 0; i < files.length; i++) {
-        //         assert.equal(
-        //             files[i].workspacePath,
-        //             filesToCreate[i].newFilepath,
-        //         );
-        //     }
-        //
-        //     assert.deepEqual(syncinator.cacheDump(), [
-        //         { ...files[0], content: "lorem ipsum 1" },
-        //         { ...files[1], content: "lorem ipsum 2" },
-        //         { ...files[2], content: "lorem ipsum 3" },
-        //     ]);
-        //
-        //     assert.strictEqual(sendMessage.mock.callCount(), 1);
-        //     assert.deepEqual(sendMessage.mock.calls[0].arguments[0], {
-        //         type: MessageType.Rename,
-        //         objectType: "folder",
-        //         fileId: 0,
-        //         workspacePath: "folderToRename",
-        //     } as EventMessage);
-        // });
+        test("should rename a folder on event 'rename'", async () => {
+            const folderToRename = "folderToRename";
+            const filesToCreate = [
+                {
+                    content: "lorem ipsum 1",
+                    oldFilepath: `${folderToRename}/file1.md`,
+                    newFilepath: "renamedFolder/file1.md",
+                },
+                {
+                    content: "lorem ipsum 2",
+                    oldFilepath: `${folderToRename}/file2.md`,
+                    newFilepath: "renamedFolder/file2.md",
+                },
+                {
+                    content: "lorem ipsum 3",
+                    oldFilepath: "file.md",
+                    newFilepath: "file.md",
+                },
+            ];
+
+            const createdFiles = [];
+            for (const file of filesToCreate) {
+                await storage.write(file.oldFilepath, file.content);
+                createdFiles.push(
+                    await apiClient.createFile(file.oldFilepath, file.content),
+                );
+            }
+
+            // loading cache
+            await syncinator.init();
+
+            assert.equal(syncinator.cacheDump().length, 3);
+
+            for (let i = 0; i < createdFiles.length; i++) {
+                await apiClient.updateFile(
+                    createdFiles[i].id,
+                    filesToCreate[i].newFilepath,
+                );
+            }
+
+            await syncinator.onEventMessage({
+                type: MessageType.Rename,
+                fileId: 0,
+                objectType: "folder",
+                workspacePath: folderToRename,
+            });
+
+            // checking cache
+            const files = await apiClient.fetchFiles();
+            assert.equal(files.length, 3);
+
+            assert.deepEqual(syncinator.cacheDump(), [
+                { ...files[0], content: "lorem ipsum 1" },
+                { ...files[1], content: "lorem ipsum 2" },
+                { ...files[2], content: "lorem ipsum 3" },
+            ]);
+        });
     });
 });

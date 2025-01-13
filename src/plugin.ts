@@ -373,7 +373,10 @@ export class Syncinator {
 
                 this.storage.rename(oldPath, newPath);
             } else if (event.objectType === "folder") {
-                const workspacePath = event.workspacePath + path.sep;
+                const workspacePath =
+                    event.workspacePath[-1] === path.sep
+                        ? event.workspacePath
+                        : event.workspacePath + path.sep;
                 const files = await this.storage.listFiles({
                     prefix: workspacePath,
                 });
