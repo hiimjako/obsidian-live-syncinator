@@ -69,10 +69,7 @@ export class Disk {
         }
     }
 
-    async delete(
-        vaultPath: string,
-        { force } = { force: false },
-    ): Promise<void> {
+    async delete(vaultPath: string, { force } = { force: false }): Promise<void> {
         const file = this.vault.getFileByPath(vaultPath);
         const folder = this.vault.getFolderByPath(vaultPath);
 
@@ -84,10 +81,7 @@ export class Disk {
         await this.vault.delete(toDelete, force);
     }
 
-    async listFiles({
-        prefix = "",
-        markdownOnly = false,
-    } = {}): Promise<TFile[]> {
+    async listFiles({ prefix = "", markdownOnly = false } = {}): Promise<TFile[]> {
         let files: TFile[] = [];
         if (markdownOnly) {
             files = this.vault.getMarkdownFiles();
@@ -124,10 +118,7 @@ export class Disk {
         return v;
     }
 
-    async persistChunks(
-        vaultPath: string,
-        chunks: DiffChunk[],
-    ): Promise<string> {
+    async persistChunks(vaultPath: string, chunks: DiffChunk[]): Promise<string> {
         assert(chunks !== null, `chunks for '${vaultPath}' are null`);
 
         let content = "";
@@ -142,27 +133,15 @@ export class Disk {
     async persistChunk(vaultPath: string, chunk: DiffChunk): Promise<string> {
         switch (chunk.type) {
             case Operation.Add:
-                return await this.addBytesToFile(
-                    vaultPath,
-                    chunk.position,
-                    chunk.text,
-                );
+                return await this.addBytesToFile(vaultPath, chunk.position, chunk.text);
             case Operation.Remove:
-                return await this.removeBytesFromFile(
-                    vaultPath,
-                    chunk.position,
-                    chunk.len,
-                );
+                return await this.removeBytesFromFile(vaultPath, chunk.position, chunk.len);
             default:
                 throw new Error(`Diff type ${chunk.type} not supported`);
         }
     }
 
-    private async addBytesToFile(
-        vaultPath: string,
-        start: number,
-        str: string,
-    ): Promise<string> {
+    private async addBytesToFile(vaultPath: string, start: number, str: string): Promise<string> {
         const file = this.vault.getFileByPath(vaultPath);
         if (file == null) {
             throw new Error(`file '${vaultPath}' doesn't exists`);

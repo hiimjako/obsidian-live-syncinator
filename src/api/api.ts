@@ -56,10 +56,7 @@ export class ApiClient {
         return res.data ?? [];
     }
 
-    async fetchOperations(
-        fileId: number,
-        fromVersion: number,
-    ): Promise<Operation[]> {
+    async fetchOperations(fileId: number, fromVersion: number): Promise<Operation[]> {
         const res = await this.client.get<Operation[]>(
             `/v1/api/operation?fileId=${fileId}&from=${fromVersion}`,
         );
@@ -72,9 +69,7 @@ export class ApiClient {
     }
 
     async fetchFile(fileId: number): Promise<FileWithContent> {
-        const res = await this.client.get<ArrayBuffer>(
-            `/v1/api/file/${fileId}`,
-        );
+        const res = await this.client.get<ArrayBuffer>(`/v1/api/file/${fileId}`);
 
         if (res.status !== StatusCodes.OK) {
             throw new Error(`error while fetching file content ${res.data}`);
@@ -82,16 +77,12 @@ export class ApiClient {
 
         const contentType = res.headers.get("Content-Type");
         if (!contentType || !contentType.startsWith("multipart/mixed")) {
-            throw new Error(
-                "Unexpected Content-Type, expected multipart/mixed",
-            );
+            throw new Error("Unexpected Content-Type, expected multipart/mixed");
         }
 
         const multipart = new Multipart().parseParts(contentType, res.data);
         const filePart = multipart.files?.[0] ?? null;
-        const metadataPart = multipart.fileds.find(
-            (field) => field.name === "metadata",
-        );
+        const metadataPart = multipart.fileds.find((field) => field.name === "metadata");
 
         if (!metadataPart || !filePart) {
             throw new Error("Incomplete multipart response");
@@ -109,10 +100,7 @@ export class ApiClient {
         return fileWithContent;
     }
 
-    async createFile(
-        filepath: string,
-        content: string | ArrayBuffer,
-    ): Promise<File> {
+    async createFile(filepath: string, content: string | ArrayBuffer): Promise<File> {
         const multipart = new Multipart()
             .createFormFile("file", path.basename(filepath), content)
             .createFormField("path", filepath);
@@ -132,10 +120,7 @@ export class ApiClient {
     async updateFile(fileId: number, path: string): Promise<File> {
         const body: UpdateFile = { path };
 
-        const res = await this.client.patch<File>(
-            `/v1/api/file/${fileId}`,
-            body,
-        );
+        const res = await this.client.patch<File>(`/v1/api/file/${fileId}`, body);
 
         if (res.status !== StatusCodes.OK) {
             throw new Error(`error while updating file: ${res.data}`);
@@ -158,9 +143,7 @@ export class ApiClient {
         const res = await this.client.post<AuthToken>("/v1/auth/login", wc);
 
         if (res.status !== StatusCodes.OK) {
-            throw new Error(
-                `invalid credentials for workspace ${wc.name}: ${res.data}`,
-            );
+            throw new Error(`invalid credentials for workspace ${wc.name}: ${res.data}`);
         }
 
         return res.data;

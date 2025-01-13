@@ -90,9 +90,7 @@ export class SettingTab extends PluginSettingTab {
                     })
                     .setValue(this.plugin.settings.logLevel.toString())
                     .onChange((value) => {
-                        this.plugin.settings.logLevel = Number(
-                            value,
-                        ) as LogLevelType;
+                        this.plugin.settings.logLevel = Number(value) as LogLevelType;
                         log.setGlobalLevel(this.plugin.settings.logLevel);
                     }),
             );
@@ -107,9 +105,7 @@ export class SettingTab extends PluginSettingTab {
                         local: "Local",
                         auto: "Auto merge",
                     })
-                    .setValue(
-                        this.plugin.settings.conflictResolution.toString(),
-                    )
+                    .setValue(this.plugin.settings.conflictResolution.toString())
                     .onChange((value: ConflictResolution) => {
                         this.plugin.settings.conflictResolution = value;
                     }),

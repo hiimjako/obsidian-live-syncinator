@@ -13,37 +13,25 @@ const logPrefix = "[syncinator]";
 
 export class Logger {
     debug(message: unknown, ...optionalParams: unknown[]) {
-        if (
-            globalLogLevel > LogLevel.SILENT &&
-            globalLogLevel <= LogLevel.DEBUG
-        ) {
+        if (globalLogLevel > LogLevel.SILENT && globalLogLevel <= LogLevel.DEBUG) {
             console.debug(logPrefix, message, ...optionalParams);
         }
     }
 
     info(message: unknown, ...optionalParams: unknown[]) {
-        if (
-            globalLogLevel > LogLevel.SILENT &&
-            globalLogLevel <= LogLevel.INFO
-        ) {
+        if (globalLogLevel > LogLevel.SILENT && globalLogLevel <= LogLevel.INFO) {
             console.info(logPrefix, message, ...optionalParams);
         }
     }
 
     warn(message: unknown, ...optionalParams: unknown[]) {
-        if (
-            globalLogLevel > LogLevel.SILENT &&
-            globalLogLevel <= LogLevel.WARN
-        ) {
+        if (globalLogLevel > LogLevel.SILENT && globalLogLevel <= LogLevel.WARN) {
             console.warn(logPrefix, message, ...optionalParams);
         }
     }
 
     error(message: unknown, ...optionalParams: unknown[]) {
-        if (
-            globalLogLevel > LogLevel.SILENT &&
-            globalLogLevel <= LogLevel.ERROR
-        ) {
+        if (globalLogLevel > LogLevel.SILENT && globalLogLevel <= LogLevel.ERROR) {
             console.error(logPrefix, message, ...optionalParams);
         }
     }

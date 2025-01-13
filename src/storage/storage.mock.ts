@@ -9,10 +9,7 @@ export function CreateVaultMock(basepath: string): Vault {
 
     const v = {
         adapter: {
-            async exists(
-                normalizedPath: string,
-                _sensitive?: boolean,
-            ): Promise<boolean> {
+            async exists(normalizedPath: string, _sensitive?: boolean): Promise<boolean> {
                 const vaultPath = fullPath(normalizedPath);
 
                 try {
@@ -78,8 +75,7 @@ export function CreateVaultMock(basepath: string): Vault {
             const vaultPath = basepath;
             const filenames: TFile[] = [];
 
-            let subGetFiles: (basepath: string, subPath: string) => void =
-                () => {};
+            let subGetFiles: (basepath: string, subPath: string) => void = () => {};
             subGetFiles = (basepath: string, subPath: string) => {
                 const items = readdirSync(path.join(basepath, subPath));
 
@@ -98,10 +94,7 @@ export function CreateVaultMock(basepath: string): Vault {
                                 ctime: stat.ctime.getTime(),
                                 mtime: stat.mtime.getTime(),
                             },
-                            name: path.basename(
-                                vaultPath,
-                                path.extname(vaultPath),
-                            ),
+                            name: path.basename(vaultPath, path.extname(vaultPath)),
                             basename: path.basename(vaultPath),
                             parent: null,
                             extension: path.extname(vaultPath),
@@ -117,8 +110,7 @@ export function CreateVaultMock(basepath: string): Vault {
         getMarkdownFiles() {
             const filenames: TFile[] = [];
 
-            let subGetFiles: (basepath: string, subPath: string) => void =
-                () => {};
+            let subGetFiles: (basepath: string, subPath: string) => void = () => {};
             subGetFiles = (basepath: string, subPath: string) => {
                 const items = readdirSync(path.join(basepath, subPath));
 
@@ -137,10 +129,7 @@ export function CreateVaultMock(basepath: string): Vault {
                                 ctime: stat.ctime.getTime(),
                                 mtime: stat.mtime.getTime(),
                             },
-                            name: path.basename(
-                                vaultPath,
-                                path.extname(vaultPath),
-                            ),
+                            name: path.basename(vaultPath, path.extname(vaultPath)),
                             basename: path.basename(vaultPath),
                             parent: null,
                             extension: path.extname(vaultPath),
@@ -156,10 +145,7 @@ export function CreateVaultMock(basepath: string): Vault {
         getFileByPath(normalizedPath) {
             return {
                 vault: v,
-                name: path.basename(
-                    normalizedPath,
-                    path.extname(normalizedPath),
-                ),
+                name: path.basename(normalizedPath, path.extname(normalizedPath)),
                 extension: path.extname(normalizedPath),
                 path: normalizedPath,
                 parent: null,
@@ -190,10 +176,7 @@ export function CreateVaultMock(basepath: string): Vault {
         async readBinary(file) {
             const vaultPath = fullPath(file.path);
             const buffer = await fs.readFile(vaultPath);
-            return buffer.buffer.slice(
-                buffer.byteOffset,
-                buffer.byteOffset + buffer.byteLength,
-            );
+            return buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength);
         },
         async createBinary(normalizedPath, data, _options) {
             if (!(data instanceof ArrayBuffer || ArrayBuffer.isView(data))) {

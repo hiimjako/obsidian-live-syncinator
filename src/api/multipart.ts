@@ -33,11 +33,7 @@ export class Multipart {
         return this._fields;
     }
 
-    createFormFile(
-        fieldname: string,
-        filename: string,
-        value: string | ArrayBuffer,
-    ): Multipart {
+    createFormFile(fieldname: string, filename: string, value: string | ArrayBuffer): Multipart {
         let isBase64 = false;
         let stringValue: string;
         if (value instanceof ArrayBuffer) {
@@ -103,8 +99,7 @@ export class Multipart {
     }
 
     private randomBoundary(): string {
-        let boundary =
-            Math.random().toString(36).substring(2) + Date.now().toString(36);
+        let boundary = Math.random().toString(36).substring(2) + Date.now().toString(36);
 
         const specialChars = `()<>@,;:\\\"/[]?= `;
 
@@ -115,17 +110,12 @@ export class Multipart {
         return boundary;
     }
 
-    parseParts(
-        contentType: string,
-        encoded: AllowSharedBufferSource,
-    ): Multipart {
+    parseParts(contentType: string, encoded: AllowSharedBufferSource): Multipart {
         const isMultipart =
             contentType?.startsWith("multipart/mixed") ||
             contentType?.startsWith("multipart/form-data");
         if (!isMultipart) {
-            throw new Error(
-                "Unexpected Content-Type, expected multipart/mixed",
-            );
+            throw new Error("Unexpected Content-Type, expected multipart/mixed");
         }
 
         const boundary = contentType.split("boundary=")[1];
@@ -164,9 +154,7 @@ export class Multipart {
                 const component = components[j];
 
                 if (component.startsWith("Content-Type:")) {
-                    part.contentType = component
-                        .substring("Content-Type:".length)
-                        .trim();
+                    part.contentType = component.substring("Content-Type:".length).trim();
                     lastIndexProcessed = j;
                 }
 
@@ -175,17 +163,14 @@ export class Multipart {
                     const filenameMatch = component.match(/filename="([^"]*)"/);
 
                     part.name = nameMatch ? nameMatch[1].trim() : "";
-                    part.filename = filenameMatch
-                        ? filenameMatch[1].trim()
-                        : "";
+                    part.filename = filenameMatch ? filenameMatch[1].trim() : "";
                     lastIndexProcessed = j;
                 }
 
                 if (component.startsWith("Content-Transfer-Encoding:")) {
                     part.isBase64 =
-                        component
-                            .substring("Content-Transfer-Encoding:".length)
-                            .trim() === "base64";
+                        component.substring("Content-Transfer-Encoding:".length).trim() ===
+                        "base64";
                     lastIndexProcessed = j;
                 }
             }

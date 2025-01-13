@@ -35,16 +35,11 @@ export class HttpClient {
 
         if (options.method !== HttpMethod.GET) {
             const reqContentType =
-                ((options.headers ?? {}) as Record<string, string>)[
-                    "Content-Type"
-                ] ||
+                ((options.headers ?? {}) as Record<string, string>)["Content-Type"] ||
                 this.defaultHeaders["Content-Type"] ||
                 "";
 
-            if (
-                reqContentType.includes("application/json") ||
-                reqContentType === ""
-            ) {
+            if (reqContentType.includes("application/json") || reqContentType === "") {
                 options.body = JSON.stringify(options.body);
             }
         }

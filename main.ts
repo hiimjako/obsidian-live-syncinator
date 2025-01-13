@@ -6,11 +6,7 @@ import { Disk } from "src/storage/storage";
 import { ApiClient } from "./src/api/api";
 import { HttpClient } from "./src/api/http";
 import { WsClient } from "./src/api/ws";
-import {
-    DEFAULT_SETTINGS,
-    type PluginSettings,
-    SettingTab,
-} from "./src/settings";
+import { DEFAULT_SETTINGS, type PluginSettings, SettingTab } from "./src/settings";
 
 export default class Syncinator extends Plugin {
     settings: PluginSettings = DEFAULT_SETTINGS;
@@ -27,14 +23,9 @@ export default class Syncinator extends Plugin {
     }
 
     async registerPlugin() {
-        const plugin = new SyncinatorPlugin(
-            this.storage,
-            this.apiClient,
-            this.wsClient,
-            {
-                conflictResolution: this.settings.conflictResolution,
-            },
-        );
+        const plugin = new SyncinatorPlugin(this.storage, this.apiClient, this.wsClient, {
+            conflictResolution: this.settings.conflictResolution,
+        });
 
         await plugin.init();
 
@@ -71,17 +62,11 @@ export default class Syncinator extends Plugin {
             {},
         );
         this.apiClient = new ApiClient(httpClient);
-        this.wsClient = new WsClient(
-            this.settings.useTLS ? "wss" : "ws",
-            this.settings.domain,
-        );
+        this.wsClient = new WsClient(this.settings.useTLS ? "wss" : "ws", this.settings.domain);
 
         await this.refreshToken();
         this.registerInterval(
-            window.setInterval(
-                async () => await this.refreshToken(),
-                5 * 60 * 1000,
-            ),
+            window.setInterval(async () => await this.refreshToken(), 5 * 60 * 1000),
         );
 
         // Deferred startup
@@ -105,9 +90,7 @@ export default class Syncinator extends Plugin {
     }
 
     private updateStatusBar() {
-        this.statusBar.setText(
-            `sync: ${this.uploadingFiles}↑ ${this.downloadingFiles}↓`,
-        );
+        this.statusBar.setText(`sync: ${this.uploadingFiles}↑ ${this.downloadingFiles}↓`);
     }
 
     addUploadingFiles(n: number) {

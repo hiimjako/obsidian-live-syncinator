@@ -43,21 +43,15 @@ export class WsClient {
     private onOpenHandler?: () => void;
     private onCloseHandler?: () => void;
     private onErrorHandler?: (e: globalThis.Event) => void;
-    private onChunkMessageHandler: (_: ChunkMessage) => Promise<void> =
-        async () => {};
-    private onEventMessageHandler: (_: EventMessage) => Promise<void> =
-        async () => {};
+    private onChunkMessageHandler: (_: ChunkMessage) => Promise<void> = async () => {};
+    private onEventMessageHandler: (_: EventMessage) => Promise<void> = async () => {};
 
-    private chunkMessageQueue = new AsyncMessageQueue<ChunkMessage>(
-        async (message) => {
-            await this.onChunkMessageHandler(message);
-        },
-    );
-    private eventMessageQueue = new AsyncMessageQueue<EventMessage>(
-        async (msg) => {
-            await this.onEventMessageHandler(msg);
-        },
-    );
+    private chunkMessageQueue = new AsyncMessageQueue<ChunkMessage>(async (message) => {
+        await this.onChunkMessageHandler(message);
+    });
+    private eventMessageQueue = new AsyncMessageQueue<EventMessage>(async (msg) => {
+        await this.onEventMessageHandler(msg);
+    });
 
     constructor(scheme: "ws" | "wss", domain: string, options: Options = {}) {
         this.options = { ...this.options, ...options };

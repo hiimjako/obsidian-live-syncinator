@@ -1,11 +1,6 @@
 import assert from "node:assert";
 import { describe, test } from "node:test";
-import {
-    Operation,
-    applyDiff,
-    computeDiff,
-    invertDiff as inverseDiff,
-} from "../diff/diff";
+import { Operation, applyDiff, computeDiff, invertDiff as inverseDiff } from "../diff/diff";
 import type { DiffChunk } from "../diff/diff";
 
 describe("compute diff should be compliant with server implemenation", () => {
@@ -22,25 +17,19 @@ describe("compute diff should be compliant with server implemenation", () => {
             name: "compute remove chunk 2",
             text: " ",
             update: "",
-            expected: [
-                { position: 0, type: Operation.Remove, text: " ", len: 1 },
-            ] as DiffChunk[],
+            expected: [{ position: 0, type: Operation.Remove, text: " ", len: 1 }] as DiffChunk[],
         },
         {
             name: "compute add chunk",
             text: "hello!",
             update: "hello world!",
-            expected: [
-                { position: 5, type: Operation.Add, text: " world", len: 6 },
-            ] as DiffChunk[],
+            expected: [{ position: 5, type: Operation.Add, text: " world", len: 6 }] as DiffChunk[],
         },
         {
             name: "compute add chunk 2",
             text: "h",
             update: "he",
-            expected: [
-                { position: 1, type: Operation.Add, text: "e", len: 1 },
-            ] as DiffChunk[],
+            expected: [{ position: 1, type: Operation.Add, text: "e", len: 1 }] as DiffChunk[],
         },
         {
             name: "handles newlines",

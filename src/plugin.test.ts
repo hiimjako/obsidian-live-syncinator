@@ -11,11 +11,7 @@ import { Syncinator } from "./plugin";
 import { Disk } from "./storage/storage";
 import { CreateVaultMock } from "./storage/storage.mock";
 
-async function assertEventually(
-    assertion: () => Promise<void>,
-    timeout = 5000,
-    interval = 100,
-) {
+async function assertEventually(assertion: () => Promise<void>, timeout = 5000, interval = 100) {
     const startTime = Date.now();
 
     while (Date.now() - startTime < timeout) {
@@ -65,10 +61,7 @@ describe("Plugin integration tests", () => {
         const httpClient = new HttpClient("http", "127.0.0.1:8080", {});
 
         apiClient = new ApiClient(httpClient);
-        const token = await apiClient.login(
-            credentials.name,
-            credentials.password,
-        );
+        const token = await apiClient.login(credentials.name, credentials.password);
 
         wsClient = new WsClient("ws", "127.0.0.1:8080", {
             maxReconnectAttempts: 0,
@@ -98,18 +91,12 @@ describe("Plugin integration tests", () => {
             const filesPreInit = await storage.listFiles();
             assert.equal(filesPreInit.length, 0);
 
-            const sendMessage = t.mock.method(
-                wsClient,
-                "sendMessage",
-                () => {},
-            );
+            const sendMessage = t.mock.method(wsClient, "sendMessage", () => {});
 
             await syncinator.init();
 
             // checking cache
-            assert.deepEqual(syncinator.cacheDump(), [
-                { ...onlineFile, content },
-            ]);
+            assert.deepEqual(syncinator.cacheDump(), [{ ...onlineFile, content }]);
 
             // checking local vault
             const files = await storage.listFiles();
@@ -129,11 +116,7 @@ describe("Plugin integration tests", () => {
 
             await storage.write(filepath, content);
 
-            const sendMessage = t.mock.method(
-                wsClient,
-                "sendMessage",
-                () => {},
-            );
+            const sendMessage = t.mock.method(wsClient, "sendMessage", () => {});
 
             const filesPreInit = await apiClient.fetchFiles();
             assert.equal(filesPreInit.length, 0);
@@ -156,9 +139,7 @@ describe("Plugin integration tests", () => {
             ] as EventMessage[]);
 
             // checking cache
-            assert.deepEqual(syncinator.cacheDump(), [
-                { ...files[0], content },
-            ]);
+            assert.deepEqual(syncinator.cacheDump(), [{ ...files[0], content }]);
         });
 
         test("should align changes with 'remote' priority", async (t) => {
@@ -169,24 +150,15 @@ describe("Plugin integration tests", () => {
 
             syncinator.options.conflictResolution = "remote";
 
-            const onlineFile = await apiClient.createFile(
-                filepath,
-                remoteContent,
-            );
+            const onlineFile = await apiClient.createFile(filepath, remoteContent);
             await storage.write(filepath, localContent);
 
-            const sendMessage = t.mock.method(
-                wsClient,
-                "sendMessage",
-                () => {},
-            );
+            const sendMessage = t.mock.method(wsClient, "sendMessage", () => {});
 
             await syncinator.init();
 
             // checking cache
-            assert.deepEqual(syncinator.cacheDump(), [
-                { ...onlineFile, content: remoteContent },
-            ]);
+            assert.deepEqual(syncinator.cacheDump(), [{ ...onlineFile, content: remoteContent }]);
 
             // checking local vault
             const fileContent = await storage.readText(filepath);
@@ -202,11 +174,7 @@ describe("Plugin integration tests", () => {
             const filename = "create.md";
             const filepath = `files/${filename}`;
 
-            const sendMessage = t.mock.method(
-                wsClient,
-                "sendMessage",
-                () => {},
-            );
+            const sendMessage = t.mock.method(wsClient, "sendMessage", () => {});
 
             const filesPreInit = await apiClient.fetchFiles();
             assert.equal(filesPreInit.length, 0);
@@ -224,9 +192,7 @@ describe("Plugin integration tests", () => {
             const files = await apiClient.fetchFiles();
             assert.equal(files.length, 1);
 
-            assert.deepEqual(syncinator.cacheDump(), [
-                { ...files[0], content: content },
-            ]);
+            assert.deepEqual(syncinator.cacheDump(), [{ ...files[0], content: content }]);
 
             assert.strictEqual(sendMessage.mock.callCount(), 1);
             assert.deepEqual(sendMessage.mock.calls[0].arguments[0], {
@@ -242,11 +208,7 @@ describe("Plugin integration tests", () => {
             const filename = "create.md";
             const filepath = `files/${filename}`;
 
-            const sendMessage = t.mock.method(
-                wsClient,
-                "sendMessage",
-                () => {},
-            );
+            const sendMessage = t.mock.method(wsClient, "sendMessage", () => {});
 
             const onlineFile = await apiClient.createFile(filepath, content);
             await storage.write(filepath, content);
@@ -280,11 +242,7 @@ describe("Plugin integration tests", () => {
         });
 
         test("should delete a folder on obsidian event 'delete'", async (t) => {
-            const sendMessage = t.mock.method(
-                wsClient,
-                "sendMessage",
-                () => {},
-            );
+            const sendMessage = t.mock.method(wsClient, "sendMessage", () => {});
             const filesToCreate = [
                 {
                     content: "lorem ipsum 1",
@@ -325,9 +283,7 @@ describe("Plugin integration tests", () => {
             const files = await apiClient.fetchFiles();
             assert.equal(files.length, 1);
 
-            assert.deepEqual(syncinator.cacheDump(), [
-                { ...files[0], content: "lorem ipsum 3" },
-            ]);
+            assert.deepEqual(syncinator.cacheDump(), [{ ...files[0], content: "lorem ipsum 3" }]);
 
             assert.strictEqual(sendMessage.mock.callCount(), 3);
             assert.deepEqual(sendMessage.mock.calls[0].arguments[0], {
@@ -357,11 +313,7 @@ describe("Plugin integration tests", () => {
             const newFilename = "newName.md";
             const newFilepath = `files/${newFilename}`;
 
-            const sendMessage = t.mock.method(
-                wsClient,
-                "sendMessage",
-                () => {},
-            );
+            const sendMessage = t.mock.method(wsClient, "sendMessage", () => {});
 
             await apiClient.createFile(oldFilepath, content);
             await storage.write(oldFilepath, content);
@@ -398,11 +350,7 @@ describe("Plugin integration tests", () => {
         });
 
         test("should rename a folder on obsidian event 'rename'", async (t) => {
-            const sendMessage = t.mock.method(
-                wsClient,
-                "sendMessage",
-                () => {},
-            );
+            const sendMessage = t.mock.method(wsClient, "sendMessage", () => {});
             const filesToCreate = [
                 {
                     content: "lorem ipsum 1",
@@ -453,10 +401,7 @@ describe("Plugin integration tests", () => {
             assert.equal(files.length, 3);
 
             for (let i = 0; i < files.length; i++) {
-                assert.equal(
-                    files[i].workspacePath,
-                    filesToCreate[i].newFilepath,
-                );
+                assert.equal(files[i].workspacePath, filesToCreate[i].newFilepath);
             }
 
             assert.deepEqual(syncinator.cacheDump(), [
@@ -491,20 +436,16 @@ describe("Plugin integration tests", () => {
             const files = await apiClient.fetchFiles();
             assert.equal(files.length, 1);
 
-            assert.deepEqual(syncinator.cacheDump(), [
-                { ...files[0], content: content },
-            ]);
+            assert.deepEqual(syncinator.cacheDump(), [{ ...files[0], content: content }]);
 
-            await syncinator.onChunkMessage({
+            await syncinator.handleChunkMessage({
                 type: MessageType.Chunk,
                 fileId: files[0].id,
                 chunks: computeDiff(content, newContent),
                 version: files[0].version,
             });
 
-            assert.deepEqual(syncinator.cacheDump(), [
-                { ...files[0], content: newContent },
-            ]);
+            assert.deepEqual(syncinator.cacheDump(), [{ ...files[0], content: newContent }]);
         });
 
         test("should create a file on 'create'", async (_t) => {
@@ -515,16 +456,14 @@ describe("Plugin integration tests", () => {
 
             assert.deepEqual(syncinator.cacheDump(), []);
 
-            await syncinator.onEventMessage({
+            await syncinator.handleEventMessage({
                 type: MessageType.Create,
                 fileId: createdFile.id,
                 objectType: "file",
                 workspacePath: filepath,
             });
 
-            assert.deepEqual(syncinator.cacheDump(), [
-                { ...createdFile, content },
-            ]);
+            assert.deepEqual(syncinator.cacheDump(), [{ ...createdFile, content }]);
 
             await assertEventually(async () => {
                 const diskContent = await storage.readText(filepath);
@@ -538,7 +477,7 @@ describe("Plugin integration tests", () => {
             const exists = await storage.exists(folder);
             assert.equal(exists, false);
 
-            await syncinator.onEventMessage({
+            await syncinator.handleEventMessage({
                 type: MessageType.Create,
                 fileId: 0, // not used yet
                 objectType: "folder",
@@ -565,7 +504,7 @@ describe("Plugin integration tests", () => {
 
             assert.equal(syncinator.cacheDump().length, 1);
 
-            await syncinator.onEventMessage({
+            await syncinator.handleEventMessage({
                 type: MessageType.Delete,
                 fileId: file.id,
                 objectType: "file",
@@ -604,10 +543,7 @@ describe("Plugin integration tests", () => {
             let notDeletedFile = null;
             for (const file of filesToCreate) {
                 await storage.write(file.filepath, file.content);
-                notDeletedFile = await apiClient.createFile(
-                    file.filepath,
-                    file.content,
-                );
+                notDeletedFile = await apiClient.createFile(file.filepath, file.content);
             }
 
             // loading cache
@@ -615,7 +551,7 @@ describe("Plugin integration tests", () => {
 
             assert.equal(syncinator.cacheDump().length, 3);
 
-            await syncinator.onEventMessage({
+            await syncinator.handleEventMessage({
                 type: MessageType.Delete,
                 objectType: "folder",
                 fileId: 0, // not used
@@ -640,10 +576,7 @@ describe("Plugin integration tests", () => {
             const oldFilepath = "files/rename.md";
             const newFilepath = "files/newName.md";
 
-            const createdFile = await apiClient.createFile(
-                oldFilepath,
-                content,
-            );
+            const createdFile = await apiClient.createFile(oldFilepath, content);
             await storage.write(oldFilepath, content);
 
             // loading cache
@@ -651,7 +584,7 @@ describe("Plugin integration tests", () => {
 
             await apiClient.updateFile(createdFile.id, newFilepath);
 
-            await syncinator.onEventMessage({
+            await syncinator.handleEventMessage({
                 type: MessageType.Rename,
                 fileId: createdFile.id,
                 objectType: "file",
@@ -669,14 +602,11 @@ describe("Plugin integration tests", () => {
             const oldFilepath = "files/rename.md";
             const newFilepath = "files/newName.md";
 
-            const createdFile = await apiClient.createFile(
-                newFilepath,
-                content,
-            );
+            const createdFile = await apiClient.createFile(newFilepath, content);
 
             assert.equal(syncinator.cacheDump().length, 0);
 
-            await syncinator.onEventMessage({
+            await syncinator.handleEventMessage({
                 type: MessageType.Rename,
                 fileId: createdFile.id,
                 objectType: "file",
@@ -712,9 +642,7 @@ describe("Plugin integration tests", () => {
             const createdFiles = [];
             for (const file of filesToCreate) {
                 await storage.write(file.oldFilepath, file.content);
-                createdFiles.push(
-                    await apiClient.createFile(file.oldFilepath, file.content),
-                );
+                createdFiles.push(await apiClient.createFile(file.oldFilepath, file.content));
             }
 
             // loading cache
@@ -723,13 +651,10 @@ describe("Plugin integration tests", () => {
             assert.equal(syncinator.cacheDump().length, 3);
 
             for (let i = 0; i < createdFiles.length; i++) {
-                await apiClient.updateFile(
-                    createdFiles[i].id,
-                    filesToCreate[i].newFilepath,
-                );
+                await apiClient.updateFile(createdFiles[i].id, filesToCreate[i].newFilepath);
             }
 
-            await syncinator.onEventMessage({
+            await syncinator.handleEventMessage({
                 type: MessageType.Rename,
                 fileId: 0,
                 objectType: "folder",

@@ -7,11 +7,7 @@ describe("Multipart", () => {
     test("should create multipart", () => {
         const multipart = new Multipart()
             .createFormField("field", "foo")
-            .createFormFile(
-                "image",
-                "image.png",
-                base64ToArrayBuffer("ZHVtbXk="),
-            )
+            .createFormFile("image", "image.png", base64ToArrayBuffer("ZHVtbXk="))
             .createFormFile("file", "file.md", "content");
 
         const output = multipart.build();
@@ -37,10 +33,7 @@ content\r
 --${multipart.boundary}--\r\n`,
         );
 
-        assert.equal(
-            contentType,
-            `multipart/form-data; boundary=${multipart.boundary}`,
-        );
+        assert.equal(contentType, `multipart/form-data; boundary=${multipart.boundary}`);
     });
 
     test("should parse multipart", () => {

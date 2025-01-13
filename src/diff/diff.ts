@@ -54,11 +54,7 @@ export function applyDiff(text: string, diff: DiffChunk): string {
                 return diff.text + text;
             }
 
-            return (
-                text.slice(0, diff.position) +
-                diff.text +
-                text.slice(diff.position)
-            );
+            return text.slice(0, diff.position) + diff.text + text.slice(diff.position);
 
         case Operation.Remove:
             if (text === "") {
@@ -69,10 +65,7 @@ export function applyDiff(text: string, diff: DiffChunk): string {
                 return text.slice(diff.len);
             }
 
-            return (
-                text.slice(0, diff.position) +
-                text.slice(diff.position + diff.len)
-            );
+            return text.slice(0, diff.position) + text.slice(diff.position + diff.len);
 
         default:
             throw new Error("Invalid operation type");

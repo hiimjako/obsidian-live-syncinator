@@ -93,10 +93,7 @@ describe("Disk storage integration tests", () => {
         const d = new Disk(v);
 
         await assert.rejects(async () => {
-            await d.persistChunk(
-                "not-existing-file",
-                computeDiff("", "foo")[0],
-            );
+            await d.persistChunk("not-existing-file", computeDiff("", "foo")[0]);
         });
     });
 
@@ -117,18 +114,9 @@ describe("Disk storage integration tests", () => {
         };
 
         assert.deepEqual(await listFilesNames(), [path3, path1, path2]);
-        assert.deepEqual(await listFilesNames({ prefix: "folder" }), [
-            path1,
-            path2,
-        ]);
-        assert.deepEqual(await listFilesNames({ markdownOnly: true }), [
-            path3,
-            path1,
-        ]);
-        assert.deepEqual(
-            await listFilesNames({ prefix: "folder", markdownOnly: true }),
-            [path1],
-        );
+        assert.deepEqual(await listFilesNames({ prefix: "folder" }), [path1, path2]);
+        assert.deepEqual(await listFilesNames({ markdownOnly: true }), [path3, path1]);
+        assert.deepEqual(await listFilesNames({ prefix: "folder", markdownOnly: true }), [path1]);
     });
 
     test("should create, read, and delete objects correctly", async (t) => {
@@ -171,11 +159,7 @@ describe("Disk storage integration tests", () => {
             const path = "./foo/bar/baz/test.md";
             const splitted = new Disk(v).getIncrementalDirectories(path);
 
-            assert.deepEqual(splitted, [
-                "./foo/",
-                "./foo/bar/",
-                "./foo/bar/baz/",
-            ]);
+            assert.deepEqual(splitted, ["./foo/", "./foo/bar/", "./foo/bar/baz/"]);
         });
 
         test("should handle folder path", async () => {
