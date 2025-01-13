@@ -2,15 +2,15 @@ import assert from "node:assert";
 import { execSync } from "node:child_process";
 import fs from "node:fs/promises";
 import { afterEach, beforeEach, describe, mock, test } from "node:test";
+import { promisify } from "node:util";
 import type { Vault } from "obsidian";
-import { ApiClient, File, type WorkspaceCredentials } from "./api/api";
+import { ApiClient, type WorkspaceCredentials } from "./api/api";
 import { HttpClient } from "./api/http";
 import { type EventMessage, MessageType, WsClient } from "./api/ws";
 import { computeDiff } from "./diff/diff";
 import { Syncinator } from "./plugin";
 import { Disk } from "./storage/storage";
 import { CreateVaultMock } from "./storage/storage.mock";
-import { promisify } from "node:util";
 const sleep = promisify(setTimeout);
 
 async function assertEventually(assertion: () => Promise<void>, timeout = 5000, interval = 100) {

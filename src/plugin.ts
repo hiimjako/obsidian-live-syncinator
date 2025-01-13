@@ -64,106 +64,119 @@ export class Syncinator {
      * Publish to the server the local unsynchronized files
      */
     async pushLocalFiles() {
-        const files = await this.storage.listFiles();
+        try {
+            const files = await this.storage.listFiles();
 
-        const filesToPush = files.map(async (file) => {
-            if (this.fileCache.hasByPath(file.path)) {
-                return;
-            }
+            const filesToPush = files.map(async (file) => {
+                if (this.fileCache.hasByPath(file.path)) {
+                    return;
+                }
 
-            const currentContent = await this.storage.read(file.path);
-            const fileApi = await this.apiClient.createFile(file.path, currentContent);
-            this.fileCache.create({ ...fileApi, content: currentContent });
+                const currentContent = await this.storage.read(file.path);
+                const fileApi = await this.apiClient.createFile(file.path, currentContent);
+                this.fileCache.create({ ...fileApi, content: currentContent });
 
-            const msg: EventMessage = {
-                type: MessageType.Create,
-                fileId: fileApi.id,
-                objectType: "file",
-                workspacePath: fileApi.workspacePath,
-            };
-            this.wsClient.sendMessage(msg);
-        });
+                const msg: EventMessage = {
+                    type: MessageType.Create,
+                    fileId: fileApi.id,
+                    objectType: "file",
+                    workspacePath: fileApi.workspacePath,
+                };
+                this.wsClient.sendMessage(msg);
+            });
 
-        await Promise.allSettled(filesToPush);
+            await Promise.allSettled(filesToPush);
+        } catch (error) {
+            log.error("error while pushing local files", error);
+        }
     }
 
     /**
      * Publish to the server the local unsynchronized files
      */
     async fetchRemoteFiles() {
-        const files = await this.apiClient.fetchFiles();
-        log.info(`fetched ${files.length} files from remote`);
-        log.debug(files);
+        try {
+            const files = await this.apiClient.fetchFiles();
+            log.info(`fetched ${files.length} files from remote`);
+            log.debug(files);
 
-        const fetchRemotePromises = files.map(async (file) => {
-            const exists = await this.storage.exists(file.workspacePath);
-            const fileWithContent = await this.apiClient.fetchFile(file.id);
+            const fetchRemotePromises = files.map(async (file) => {
+                const exists = await this.storage.exists(file.workspacePath);
+                const fileWithContent = await this.apiClient.fetchFile(file.id);
 
-            this.fileCache.create(fileWithContent);
-            if (!exists) {
-                await this.storage.write(file.workspacePath, fileWithContent.content);
-            } else {
-                // Conflict
+                this.fileCache.create(fileWithContent);
+                if (!exists) {
+                    await this.storage.write(file.workspacePath, fileWithContent.content);
+                } else {
+                    // Conflict
 
-                if (!isText(file.workspacePath) || typeof fileWithContent.content !== "string") {
-                    // TODO: it should check for binary files that changed with same workspacePath
-                    return;
-                }
-                const localContent = await this.storage.readText(file.workspacePath);
-                if (fileWithContent.content === localContent) {
-                    return;
-                }
-
-                const stat = await this.storage.stat(file.workspacePath);
-                const localFileMtime = new Date(stat?.mtime ?? stat?.ctime ?? 0);
-                const remoteFileMtime = new Date(fileWithContent.updatedAt);
-
-                const shouldRemote =
-                    this.options.conflictResolution === "auto" && remoteFileMtime >= localFileMtime;
-
-                const shouldLocal =
-                    this.options.conflictResolution === "auto" && remoteFileMtime < localFileMtime;
-
-                if (this.options.conflictResolution === "remote" || shouldRemote) {
-                    log.debug(
-                        `handling conflic on file ${file.workspacePath}, overwriting local copy`,
-                    );
-                    this.fileCache.setById(file.id, {
-                        ...file,
-                        content: fileWithContent.content,
-                    });
-                    await this.storage.write(file.workspacePath, fileWithContent.content, {
-                        force: true,
-                    });
-                } else if (this.options.conflictResolution === "local" || shouldLocal) {
-                    // target is local content
-                    const chunks = computeDiff(fileWithContent.content, localContent);
-                    if (chunks.length === 0) {
+                    if (
+                        !isText(file.workspacePath) ||
+                        typeof fileWithContent.content !== "string"
+                    ) {
+                        // TODO: it should check for binary files that changed with same workspacePath
+                        return;
+                    }
+                    const localContent = await this.storage.readText(file.workspacePath);
+                    if (fileWithContent.content === localContent) {
                         return;
                     }
 
-                    log.debug(
-                        `handling conflic on file ${file.workspacePath}, overwriting remote copy`,
-                    );
-                    this.fileCache.setById(file.id, {
-                        ...file,
-                        updatedAt: new Date(stat?.mtime ?? "").toISOString(),
-                        content: localContent,
-                    });
-                    const msg: ChunkMessage = {
-                        type: MessageType.Chunk,
-                        fileId: fileWithContent.id,
-                        chunks,
-                        version: fileWithContent.version,
-                    };
-                    this.wsClient.sendMessage(msg);
-                } else {
-                    log.warn(`conflict on file ${file.workspacePath} not solved`);
-                }
-            }
-        });
+                    const stat = await this.storage.stat(file.workspacePath);
+                    const localFileMtime = new Date(stat?.mtime ?? stat?.ctime ?? 0);
+                    const remoteFileMtime = new Date(fileWithContent.updatedAt);
 
-        await Promise.allSettled(fetchRemotePromises);
+                    const shouldRemote =
+                        this.options.conflictResolution === "auto" &&
+                        remoteFileMtime >= localFileMtime;
+
+                    const shouldLocal =
+                        this.options.conflictResolution === "auto" &&
+                        remoteFileMtime < localFileMtime;
+
+                    if (this.options.conflictResolution === "remote" || shouldRemote) {
+                        log.debug(
+                            `handling conflic on file ${file.workspacePath}, overwriting local copy`,
+                        );
+                        this.fileCache.setById(file.id, {
+                            ...file,
+                            content: fileWithContent.content,
+                        });
+                        await this.storage.write(file.workspacePath, fileWithContent.content, {
+                            force: true,
+                        });
+                    } else if (this.options.conflictResolution === "local" || shouldLocal) {
+                        // target is local content
+                        const chunks = computeDiff(fileWithContent.content, localContent);
+                        if (chunks.length === 0) {
+                            return;
+                        }
+
+                        log.debug(
+                            `handling conflic on file ${file.workspacePath}, overwriting remote copy`,
+                        );
+                        this.fileCache.setById(file.id, {
+                            ...file,
+                            updatedAt: new Date(stat?.mtime ?? "").toISOString(),
+                            content: localContent,
+                        });
+                        const msg: ChunkMessage = {
+                            type: MessageType.Chunk,
+                            fileId: fileWithContent.id,
+                            chunks,
+                            version: fileWithContent.version,
+                        };
+                        this.wsClient.sendMessage(msg);
+                    } else {
+                        log.warn(`conflict on file ${file.workspacePath} not solved`);
+                    }
+                }
+            });
+
+            await Promise.allSettled(fetchRemotePromises);
+        } catch (error) {
+            log.error("error while fetching remote files", error);
+        }
     }
 
     // ---------- ChunkMessage ---------
