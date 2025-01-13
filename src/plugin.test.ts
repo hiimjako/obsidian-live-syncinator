@@ -635,53 +635,35 @@ describe("Plugin integration tests", () => {
             });
         });
 
-        // test("should rename a file on obsidian event 'rename'", async (t) => {
-        //     const content = "lorem ipsum";
-        //     const oldFilename = "rename.md";
-        //     const oldFilepath = `files/${oldFilename}`;
-        //     const newFilename = "newName.md";
-        //     const newFilepath = `files/${newFilename}`;
-        //
-        //     const sendMessage = t.mock.method(
-        //         wsClient,
-        //         "sendMessage",
-        //         () => {},
-        //     );
-        //
-        //     await apiClient.createFile(oldFilepath, content);
-        //     await storage.write(oldFilepath, content);
-        //
-        //     const filesPreInit = await apiClient.fetchFiles();
-        //     assert.equal(filesPreInit.length, 1);
-        //
-        //     // loading cache
-        //     await syncinator.init();
-        //
-        //     await syncinator.events.rename(
-        //         {
-        //             name: newFilename,
-        //             path: newFilepath,
-        //             vault,
-        //             parent: null,
-        //         },
-        //         oldFilepath,
-        //     );
-        //
-        //     // checking cache
-        //     const file = await apiClient.fetchFile(filesPreInit[0].id);
-        //     assert.equal(file.workspacePath, newFilepath);
-        //
-        //     assert.deepEqual(syncinator.cacheDump(), [{ ...file, content }]);
-        //
-        //     assert.strictEqual(sendMessage.mock.callCount(), 1);
-        //     assert.deepEqual(sendMessage.mock.calls[0].arguments[0], {
-        //         type: MessageType.Rename,
-        //         objectType: "file",
-        //         fileId: file.id,
-        //         workspacePath: oldFilepath,
-        //     } as EventMessage);
-        // });
-        //
+        test("should rename a file on event 'rename'", async (_) => {
+            const content = "lorem ipsum";
+            const oldFilepath = "files/rename.md";
+            const newFilepath = "files/newName.md";
+
+            const createdFile = await apiClient.createFile(
+                oldFilepath,
+                content,
+            );
+            await storage.write(oldFilepath, content);
+
+            // loading cache
+            await syncinator.init();
+
+            await apiClient.updateFile(createdFile.id, newFilepath);
+
+            await syncinator.onEventMessage({
+                type: MessageType.Rename,
+                fileId: createdFile.id,
+                objectType: "file",
+                workspacePath: oldFilepath,
+            });
+
+            // checking cache
+            assert.deepEqual(syncinator.cacheDump(), [
+                { ...createdFile, workspacePath: newFilepath, content },
+            ]);
+        });
+
         // test("should rename a folder on obsidian event 'rename'", async (t) => {
         //     const sendMessage = t.mock.method(
         //         wsClient,
