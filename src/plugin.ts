@@ -73,12 +73,7 @@ export class Syncinator {
                 continue;
             }
 
-            let currentContent: string | ArrayBuffer;
-            if (isText(file.path)) {
-                currentContent = await this.storage.readText(file.path);
-            } else {
-                currentContent = await this.storage.readBinary(file.path);
-            }
+            const currentContent = await this.storage.read(file.path);
             const fileApi = await this.apiClient.createFile(file.path, currentContent);
             this.fileCache.create({
                 ...fileApi,
@@ -404,12 +399,7 @@ export class Syncinator {
         }
 
         try {
-            let currentContent: string | ArrayBuffer;
-            if (isText(file.path)) {
-                currentContent = await this.storage.readText(file.path);
-            } else {
-                currentContent = await this.storage.readBinary(file.path);
-            }
+            const currentContent = await this.storage.read(file.path);
             const fileApi = await this.apiClient.createFile(file.path, currentContent);
             this.fileCache.create({ ...fileApi, content: currentContent });
 

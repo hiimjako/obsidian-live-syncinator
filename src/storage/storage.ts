@@ -3,6 +3,7 @@ import { type DiffChunk, Operation } from "../diff/diff";
 
 import type { Stat, TAbstractFile, TFile, Vault } from "obsidian";
 import { assert } from "src/utils/assert";
+import { isText } from "./filetype";
 
 export type WriteOptions = {
     force?: boolean;
@@ -94,6 +95,13 @@ export class Disk {
         }
 
         return files;
+    }
+
+    async read(vaultPath: string): Promise<string | ArrayBuffer> {
+        if (isText(vaultPath)) {
+            return await this.readText(vaultPath);
+        }
+        return await this.readBinary(vaultPath);
     }
 
     async readText(vaultPath: string): Promise<string> {
