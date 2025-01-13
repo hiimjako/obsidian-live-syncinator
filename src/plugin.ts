@@ -31,9 +31,7 @@ export class Syncinator {
     private apiClient: ApiClient;
     private wsClient: WsClient;
     private messageQueueRegistry = new DequeRegistry<number, ChunkMessage>();
-    options: Options = {
-        conflictResolution: "remote",
-    };
+    options: Options = { conflictResolution: "remote" };
     private lockedFiles = new Set<number>();
 
     events: Events;
