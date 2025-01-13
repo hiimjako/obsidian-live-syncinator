@@ -3,13 +3,15 @@ import { execSync } from "node:child_process";
 import fs from "node:fs/promises";
 import { afterEach, beforeEach, describe, mock, test } from "node:test";
 import type { Vault } from "obsidian";
-import { ApiClient, type WorkspaceCredentials } from "./api/api";
+import { ApiClient, File, type WorkspaceCredentials } from "./api/api";
 import { HttpClient } from "./api/http";
 import { type EventMessage, MessageType, WsClient } from "./api/ws";
 import { computeDiff } from "./diff/diff";
 import { Syncinator } from "./plugin";
 import { Disk } from "./storage/storage";
 import { CreateVaultMock } from "./storage/storage.mock";
+import { promisify } from "node:util";
+const sleep = promisify(setTimeout);
 
 async function assertEventually(assertion: () => Promise<void>, timeout = 5000, interval = 100) {
     const startTime = Date.now();
@@ -350,6 +352,9 @@ describe("Plugin integration tests", () => {
 
             // loading cache
             await syncinator.init();
+
+            // to check updatedAt
+            await sleep(1000);
 
             await syncinator.events.rename(
                 {
@@ -692,7 +697,7 @@ describe("Plugin integration tests", () => {
             const files = await apiClient.fetchFiles();
             assert.equal(files.length, 3);
 
-            assert.deepEqual(syncinator.cacheDump(), [
+            assert.deepStrictEqual(syncinator.cacheDump(), [
                 { ...files[0], content: "lorem ipsum 1" },
                 { ...files[1], content: "lorem ipsum 2" },
                 { ...files[2], content: "lorem ipsum 3" },

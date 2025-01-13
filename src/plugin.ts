@@ -95,9 +95,10 @@ export class Syncinator {
      */
     async fetchRemoteFiles() {
         const files = await this.apiClient.fetchFiles();
+        log.info(`fetched ${files.length} files from remote`);
+        log.debug(files);
 
-        log.debug(`fetched ${files.length} files from remote`, files);
-        for (const file of files) {
+        const fetchRemotePromises = files.map(async (file) => {
             const exists = await this.storage.exists(file.workspacePath);
             const fileWithContent = await this.apiClient.fetchFile(file.id);
 
@@ -109,11 +110,11 @@ export class Syncinator {
 
                 if (!isText(file.workspacePath) || typeof fileWithContent.content !== "string") {
                     // TODO: it should check for binary files that changed with same workspacePath
-                    continue;
+                    return;
                 }
                 const localContent = await this.storage.readText(file.workspacePath);
                 if (fileWithContent.content === localContent) {
-                    continue;
+                    return;
                 }
 
                 const stat = await this.storage.stat(file.workspacePath);
@@ -141,7 +142,7 @@ export class Syncinator {
                     // target is local content
                     const chunks = computeDiff(fileWithContent.content, localContent);
                     if (chunks.length === 0) {
-                        continue;
+                        return;
                     }
 
                     log.debug(
@@ -163,7 +164,9 @@ export class Syncinator {
                     log.warn(`conflict on file ${file.workspacePath} not solved`);
                 }
             }
-        }
+        });
+
+        await Promise.allSettled(fetchRemotePromises);
     }
 
     // ---------- ChunkMessage ---------
@@ -510,8 +513,9 @@ export class Syncinator {
         const fileToRename = this.fileCache.getByPath(oldPath);
         if (fileToRename) {
             try {
-                await this.apiClient.updateFile(fileToRename.id, file.path);
-                this.fileCache.setPath(fileToRename.id, file.path);
+                const updatedFile = await this.apiClient.updateFile(fileToRename.id, file.path);
+                this.fileCache.setPath(fileToRename.id, updatedFile.workspacePath);
+                this.fileCache.setUpdatedAt(fileToRename.id, updatedFile.updatedAt);
 
                 const msg: EventMessage = {
                     type: MessageType.Rename,
