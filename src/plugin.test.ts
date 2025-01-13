@@ -664,6 +664,31 @@ describe("Plugin integration tests", () => {
             ]);
         });
 
+        test("should create missing file on event 'rename'", async (_) => {
+            const content = "lorem ipsum";
+            const oldFilepath = "files/rename.md";
+            const newFilepath = "files/newName.md";
+
+            const createdFile = await apiClient.createFile(
+                newFilepath,
+                content,
+            );
+
+            assert.equal(syncinator.cacheDump().length, 0);
+
+            await syncinator.onEventMessage({
+                type: MessageType.Rename,
+                fileId: createdFile.id,
+                objectType: "file",
+                workspacePath: oldFilepath,
+            });
+
+            // checking cache
+            assert.deepEqual(syncinator.cacheDump(), [
+                { ...createdFile, workspacePath: newFilepath, content },
+            ]);
+        });
+
         test("should rename a folder on event 'rename'", async () => {
             const folderToRename = "folderToRename";
             const filesToCreate = [
