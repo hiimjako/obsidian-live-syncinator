@@ -6,3 +6,63 @@ available in the app when your plugin is enabled.
 If your plugin does not need CSS, delete this file.
 
 */
+
+.filename-container {
+	padding-left: 10px;
+}
+
+.save-button-container {
+	height: 5%;
+	padding: 10px;
+	border-top: 1px solid var(--background-modifier-border);
+}
+
+.diff-container {
+	display: flex;
+	height: 90%;
+}
+
+.diff-column {
+	flex: 1;
+	padding: 10px;
+	display: flex;
+	flex-direction: column;
+	height: 100%;
+	overflow: hidden;
+}
+
+.diff-header-title {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+
+	h3 {
+		margin: 0;
+	}
+
+	small {
+		display: block;
+		margin-top: 4px;
+	}
+}
+
+.diff-header {
+	margin-bottom: 15px;
+	height: 5%;
+}
+
+.scroll-container {
+	border: 1px solid var(--background-modifier-border);
+	border-radius: 4px;
+	padding: 10px;
+}
+
+.diff-content,
+.merged-content {
+	font-family: var(--font-monospace);
+	line-height: 1.5;
+}
+
+.button-container {
+	margin-top: 10px;
+}
