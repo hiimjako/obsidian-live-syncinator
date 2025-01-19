@@ -542,7 +542,9 @@ export class Syncinator {
             log.warn(`missing file for rename: "${oldPath}", probably a folder`);
             const oldWorkspacePath = oldPath.endsWith(path.sep) ? oldPath : oldPath + path.sep;
 
-            const folderFiles = await this.storage.listFiles({ prefix: oldWorkspacePath });
+            const folderFiles = await this.storage.listFiles({
+                prefix: oldWorkspacePath,
+            });
 
             const renamePromises = folderFiles.map(async (folderFile) => {
                 const fileToRename = this.fileCache.getByPath(folderFile.path);
@@ -578,7 +580,9 @@ export class Syncinator {
 
             // give time to obsidian to update cache
             for (let i = 0; i < 10; i++) {
-                const filesPostRename = await this.storage.listFiles({ prefix: oldWorkspacePath });
+                const filesPostRename = await this.storage.listFiles({
+                    prefix: oldWorkspacePath,
+                });
                 if (filesPostRename.length === 0) {
                     this.storage.delete(oldPath, { force: true });
                     break;
