@@ -1,13 +1,13 @@
 import { Notice, Plugin } from "obsidian";
-import type { App, PluginManifest, WorkspaceLeaf } from "obsidian";
+import type { App, PluginManifest } from "obsidian";
 import { log } from "src/logger/logger";
+import { DiffModal, type FileDiff } from "src/modals/conflict";
 import { Syncinator as SyncinatorPlugin } from "src/plugin";
 import { Disk } from "src/storage/storage";
 import { ApiClient } from "./src/api/api";
 import { HttpClient } from "./src/api/http";
 import { WsClient } from "./src/api/ws";
 import { DEFAULT_SETTINGS, type PluginSettings, SettingTab } from "./src/settings";
-import { DiffModal } from "src/modals/conflict";
 
 export default class Syncinator extends Plugin {
     settings: PluginSettings = DEFAULT_SETTINGS;
@@ -24,14 +24,19 @@ export default class Syncinator extends Plugin {
     }
 
     async registerPlugin() {
-        const plugin = new SyncinatorPlugin(this.storage, this.apiClient, this.wsClient, {
-            conflictResolution: this.settings.conflictResolution,
-        });
+        const plugin = new SyncinatorPlugin(
+            this.storage,
+            this.apiClient,
+            this.wsClient,
+            {
+                diffModal: this.wrappedDiffModal.bind(this),
+            },
+            {
+                conflictResolution: this.settings.conflictResolution,
+            },
+        );
 
         await plugin.init();
-
-        const modal = new DiffModal(this.app, "foo\npippo\nba", "fbaz\npippo\nbar", 1, 2);
-        modal.open();
 
         this.registerEvent(this.app.vault.on("create", plugin.events.create));
         this.registerEvent(this.app.vault.on("modify", plugin.events.modify));
@@ -105,5 +110,10 @@ export default class Syncinator extends Plugin {
     addDownlodingFiles(n: number) {
         this.downloadingFiles += n;
         this.updateStatusBar();
+    }
+
+    async wrappedDiffModal(filename: string, local: FileDiff, remote: FileDiff): Promise<string> {
+        const modal = new DiffModal(this.app, filename, local, remote);
+        return await modal.open();
     }
 }

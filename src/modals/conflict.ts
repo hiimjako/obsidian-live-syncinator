@@ -1,5 +1,5 @@
-import { type App, Modal, Setting } from "obsidian";
 import { type Change, diffWords } from "diff";
+import { type App, Modal, Setting } from "obsidian";
 
 type Side = "local" | "remote" | "both";
 
@@ -12,7 +12,7 @@ interface DiffBlock {
     side?: Side;
 }
 
-interface FileDiff {
+export interface FileDiff {
     lastUpdate: Date;
     content: string;
 }
@@ -25,27 +25,26 @@ export class DiffModal extends Modal {
     private diffs: DiffBlock[] = [];
     private mergedContentEl: HTMLElement | null = null;
     private spans: Record<number, HTMLSpanElement> = {};
-    private callback: (_: string) => Promise<void> = async (_) => {};
-    private resolvePromise: ((value: null) => void) | null = null;
+    private resolvePromise: ((value: string) => void) | null = null;
 
-    constructor(
-        app: App,
-        filename: string,
-        local: FileDiff,
-        remote: FileDiff,
-        callback: (_: string) => Promise<void>,
-    ) {
+    constructor(app: App, filename: string, local: FileDiff, remote: FileDiff) {
         super(app);
         this.filename = filename;
         this.local = local;
         this.remote = remote;
-        this.callback = callback;
     }
 
     onOpen() {
         const { contentEl } = this;
 
         if (contentEl.parentElement === null) {
+            this.close();
+            return;
+        }
+        this.calculateDiffs();
+        // one diff means no changes
+        if (this.diffs.length === 1) {
+            this.close();
             return;
         }
 
@@ -67,7 +66,6 @@ export class DiffModal extends Modal {
         this.createMergeHeader(mergedColumn, "Merged Result");
         this.createSideHeader(remoteColumn, "remote");
 
-        this.calculateDiffs();
         this.updateMergedContent();
 
         this.createDiffContent(localColumn, "local");
@@ -218,8 +216,6 @@ export class DiffModal extends Modal {
     }
 
     private saveMergedContent() {
-        this.updateMergedContent();
-        this.callback(this.mergedContent);
         this.close();
     }
 
@@ -227,11 +223,12 @@ export class DiffModal extends Modal {
         const { contentEl } = this;
         contentEl.empty();
         if (this.resolvePromise) {
-            this.resolvePromise(null);
+            this.updateMergedContent();
+            this.resolvePromise(this.mergedContent);
         }
     }
 
-    open(): Promise<string | null> {
+    open(): Promise<string> {
         return new Promise((resolve) => {
             this.resolvePromise = resolve;
             super.open();

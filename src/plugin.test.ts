@@ -6,7 +6,7 @@ import { promisify } from "node:util";
 import type { Vault } from "obsidian";
 import { ApiClient, type WorkspaceCredentials } from "./api/api";
 import { HttpClient } from "./api/http";
-import { type EventMessage, MessageType, WsClient } from "./api/ws";
+import { type ChunkMessage, type EventMessage, MessageType, WsClient } from "./api/ws";
 import { computeDiff } from "./diff/diff";
 import { Syncinator } from "./plugin";
 import { Disk } from "./storage/storage";
@@ -72,9 +72,19 @@ describe("Plugin integration tests", () => {
         apiClient.setAuthorizationHeader(token.token);
         wsClient.setAuthorization(token.token);
 
-        syncinator = new Syncinator(storage, apiClient, wsClient, {
-            conflictResolution: "remote",
-        });
+        syncinator = new Syncinator(
+            storage,
+            apiClient,
+            wsClient,
+            {
+                diffModal: async () => {
+                    return "";
+                },
+            },
+            {
+                conflictResolution: "remote",
+            },
+        );
     });
 
     afterEach(async () => {
@@ -167,6 +177,49 @@ describe("Plugin integration tests", () => {
             assert.equal(fileContent, remoteContent);
 
             assert.equal(sendMessage.mock.callCount(), 0);
+        });
+
+        test("should align changes with 'merge' priority", async (t) => {
+            // initializing a file in remote
+            const localContent = "local";
+            const remoteContent = "remote";
+            const mergedContent = localContent + remoteContent;
+            const filepath = "files/conflict.md";
+
+            syncinator.options.conflictResolution = "merge";
+
+            const onlineFile = await apiClient.createFile(filepath, remoteContent);
+            await storage.write(filepath, localContent);
+
+            const sendMessage = t.mock.method(wsClient, "sendMessage", () => {});
+            const diffModal = t.mock.method(syncinator.modals, "diffModal", () => {
+                return mergedContent;
+            });
+
+            await syncinator.init();
+
+            // checking cache
+            assert.deepEqual(syncinator.cacheDump(), [{ ...onlineFile, content: mergedContent }]);
+
+            // checking local vault
+            const fileContent = await storage.readText(filepath);
+            assert.equal(fileContent, mergedContent);
+
+            assert.equal(diffModal.mock.callCount(), 1);
+            assert.equal(sendMessage.mock.callCount(), 1);
+            assert.deepEqual(sendMessage.mock.calls[0].arguments[0], {
+                type: MessageType.Chunk,
+                chunks: [
+                    {
+                        len: 5,
+                        position: 0,
+                        text: "local",
+                        type: 1,
+                    },
+                ],
+                version: onlineFile.version,
+                fileId: onlineFile.id,
+            } as ChunkMessage);
         });
     });
 

@@ -6,6 +6,7 @@ import { type ChunkMessage, type EventMessage, MessageType, type WsClient } from
 import { FileCache } from "./cache";
 import { type DiffChunk, computeDiff, invertDiff } from "./diff/diff";
 import { type Deque, DequeRegistry } from "./messageQueue";
+import type { FileDiff } from "./modals/conflict";
 import { isText } from "./storage/filetype";
 import type { Disk } from "./storage/storage";
 import { shallowEqualStrict } from "./utils/comparison";
@@ -20,9 +21,13 @@ export interface Events {
     rename(file: TAbstractFile, oldPath: string): Promise<void>;
 }
 
-export type ConflictResolution = "remote" | "local" | "auto";
+export type ConflictResolution = "remote" | "local" | "merge";
 export interface Options {
     conflictResolution: ConflictResolution;
+}
+
+interface Modals {
+    diffModal(filename: string, local: FileDiff, remote: FileDiff): Promise<string>;
 }
 
 export class Syncinator {
@@ -32,11 +37,18 @@ export class Syncinator {
     private wsClient: WsClient;
     private messageQueueRegistry = new DequeRegistry<number, ChunkMessage>();
     options: Options = { conflictResolution: "remote" };
+    modals: Modals;
     private lockedFiles = new Set<number>();
 
     events: Events;
 
-    constructor(storage: Disk, apiClient: ApiClient, wsClient: WsClient, opts: Options) {
+    constructor(
+        storage: Disk,
+        apiClient: ApiClient,
+        wsClient: WsClient,
+        modals: Modals,
+        opts: Options,
+    ) {
         this.storage = storage;
         this.apiClient = apiClient;
         this.wsClient = wsClient;
@@ -52,6 +64,7 @@ export class Syncinator {
             rename: this.rename.bind(this),
         };
 
+        this.modals = modals;
         this.options = opts;
     }
 
@@ -117,8 +130,9 @@ export class Syncinator {
                         // TODO: it should check for binary files that changed with same workspacePath
                         return;
                     }
+                    const remoteContent = fileWithContent.content;
                     const localContent = await this.storage.readText(file.workspacePath);
-                    if (fileWithContent.content === localContent) {
+                    if (remoteContent === localContent) {
                         return;
                     }
 
@@ -126,17 +140,45 @@ export class Syncinator {
                     const localFileMtime = new Date(stat?.mtime ?? stat?.ctime ?? 0);
                     const remoteFileMtime = new Date(fileWithContent.updatedAt);
 
-                    const shouldRemote =
-                        this.options.conflictResolution === "auto" &&
-                        remoteFileMtime >= localFileMtime;
+                    if (this.options.conflictResolution === "merge") {
+                        const mergedContent = await this.modals.diffModal(
+                            file.workspacePath,
+                            {
+                                content: localContent,
+                                lastUpdate: localFileMtime,
+                            },
+                            {
+                                content: remoteContent,
+                                lastUpdate: remoteFileMtime,
+                            },
+                        );
 
-                    const shouldLocal =
-                        this.options.conflictResolution === "auto" &&
-                        remoteFileMtime < localFileMtime;
-
-                    if (this.options.conflictResolution === "remote" || shouldRemote) {
                         log.debug(
-                            `handling conflic on file ${file.workspacePath}, overwriting local copy`,
+                            `handling conflict on file ${file.workspacePath}, using merge tool`,
+                        );
+                        this.fileCache.setById(file.id, {
+                            ...file,
+                            content: mergedContent,
+                        });
+
+                        await this.storage.write(file.workspacePath, mergedContent, {
+                            force: true,
+                        });
+
+                        const chunks = computeDiff(remoteContent, mergedContent);
+                        if (chunks.length > 0) {
+                            const msg: ChunkMessage = {
+                                type: MessageType.Chunk,
+                                fileId: fileWithContent.id,
+                                chunks,
+                                version: fileWithContent.version,
+                            };
+                            this.messageQueueRegistry.getDeque(fileWithContent.id).addBack(msg);
+                            this.wsClient.sendMessage(msg);
+                        }
+                    } else if (this.options.conflictResolution === "remote") {
+                        log.debug(
+                            `handling conflict on file ${file.workspacePath}, overwriting local copy`,
                         );
                         this.fileCache.setById(file.id, {
                             ...file,
@@ -145,7 +187,7 @@ export class Syncinator {
                         await this.storage.write(file.workspacePath, fileWithContent.content, {
                             force: true,
                         });
-                    } else if (this.options.conflictResolution === "local" || shouldLocal) {
+                    } else if (this.options.conflictResolution === "local") {
                         // target is local content
                         const chunks = computeDiff(fileWithContent.content, localContent);
                         if (chunks.length === 0) {
@@ -153,7 +195,7 @@ export class Syncinator {
                         }
 
                         log.debug(
-                            `handling conflic on file ${file.workspacePath}, overwriting remote copy`,
+                            `handling conflict on file ${file.workspacePath}, overwriting remote copy`,
                         );
                         this.fileCache.setById(file.id, {
                             ...file,

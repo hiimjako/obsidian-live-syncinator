@@ -101,9 +101,9 @@ export class SettingTab extends PluginSettingTab {
             .addDropdown((component) =>
                 component
                     .addOptions({
+                        merge: "Use merge tool",
                         remote: "Remote",
                         local: "Local",
-                        auto: "Auto merge",
                     })
                     .setValue(this.plugin.settings.conflictResolution.toString())
                     .onChange((value: ConflictResolution) => {
