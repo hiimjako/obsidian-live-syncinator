@@ -166,7 +166,7 @@ export class Syncinator {
 
                     if (typeof remoteFile.content !== "string") {
                         log.error(
-                            `critical error during conflict, expected "string" got ${typeof remoteFile.content}`,
+                            `critical error during conflict, expected "string" got "${typeof remoteFile.content}"`,
                         );
                         return;
                     }
@@ -187,7 +187,7 @@ export class Syncinator {
                             );
 
                             log.debug(
-                                `handling conflict on file ${file.workspacePath}, using merge tool`,
+                                `handling conflict on file "${file.workspacePath}", using merge tool`,
                             );
 
                             fileToCache.content = mergedContent;
@@ -217,7 +217,7 @@ export class Syncinator {
                             }
 
                             log.debug(
-                                `handling conflict on file ${file.workspacePath}, overwriting remote copy`,
+                                `handling conflict on file "${file.workspacePath}", overwriting remote copy`,
                             );
 
                             fileToCache.content = localTextContent;
@@ -235,7 +235,7 @@ export class Syncinator {
                         }
                         case "remote": {
                             log.debug(
-                                `handling conflict on file ${file.workspacePath}, overwriting local copy`,
+                                `handling conflict on file "${file.workspacePath}", overwriting local copy`,
                             );
                             fileToCache.content = remoteFile.content;
                             this.fileCache.create(fileToCache);
@@ -247,11 +247,13 @@ export class Syncinator {
                         }
                         default:
                             log.warn(
-                                `conflict on file ${file.workspacePath} not solved, invalid strategy ${this.options.conflictResolution}`,
+                                `conflict on file "${file.workspacePath}" not solved, invalid strategy ${this.options.conflictResolution}`,
                             );
                             break;
                     }
                 }
+
+                log.warn(`unexpected reconciliation status for "${file.workspacePath}"`);
             });
 
             await Promise.allSettled(fetchRemotePromises);
