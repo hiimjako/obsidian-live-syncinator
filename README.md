@@ -28,5 +28,4 @@ This is recreational software provided as-is, without any warranty. While the pl
 - Add cursor of other clients
 - Add heartbeat on ws connection
 - Lazy load files in memory
-- Add a check on init on hash
 - Fix file/folder rename on init

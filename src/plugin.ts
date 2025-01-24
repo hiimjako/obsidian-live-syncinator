@@ -1,16 +1,16 @@
 import type { TAbstractFile } from "obsidian";
 import path from "path-browserify";
 import { log } from "src/logger/logger";
-import type { ApiClient, File } from "./api/api";
+import type { ApiClient, File, FileWithContent } from "./api/api";
 import { type ChunkMessage, type EventMessage, MessageType, type WsClient } from "./api/ws";
 import { FileCache } from "./cache";
 import { type DiffChunk, computeDiff, invertDiff } from "./diff/diff";
 import { type Deque, DequeRegistry } from "./messageQueue";
 import type { FileDiff } from "./modals/conflict";
-import { isText } from "./storage/filetype";
 import type { Disk } from "./storage/storage";
 import { shallowEqualStrict } from "./utils/comparison";
-import { isTextFile } from "./utils/mime";
+import { isTextFile as isTextMime } from "./utils/mime";
+import { generateSHA256Hash } from "./utils/crypto";
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -115,102 +115,141 @@ export class Syncinator {
 
             const fetchRemotePromises = files.map(async (file) => {
                 const exists = await this.storage.exists(file.workspacePath);
-                const fileWithContent = await this.apiClient.fetchFile(file.id);
 
-                this.fileCache.create(fileWithContent);
+                // Handle new files
                 if (!exists) {
-                    await this.storage.write(file.workspacePath, fileWithContent.content);
-                } else {
-                    // Conflict
+                    const remoteFile = await this.apiClient.fetchFile(file.id);
+                    this.fileCache.create(remoteFile);
+                    await this.storage.write(file.workspacePath, remoteFile.content);
+                    return;
+                }
 
-                    if (
-                        !isText(file.workspacePath) ||
-                        typeof fileWithContent.content !== "string"
-                    ) {
-                        // TODO: it should check for binary files that changed with same workspacePath
+                // Handle binary
+                if (!isTextMime(file.mimeType)) {
+                    const localBinaryContent = await this.storage.readBinary(file.workspacePath);
+                    const localHash = await generateSHA256Hash(localBinaryContent);
+
+                    const fileToCache: FileWithContent = {
+                        ...file,
+                        content: localBinaryContent,
+                    };
+
+                    if (localHash !== file.hash) {
+                        const remoteFile = await this.apiClient.fetchFile(file.id);
+                        await this.storage.write(file.workspacePath, remoteFile.content);
+                        fileToCache.content = remoteFile.content;
+                    }
+
+                    this.fileCache.create(fileToCache);
+                    return;
+                }
+
+                // Handle Text
+                if (isTextMime(file.mimeType)) {
+                    const localTextContent = await this.storage.readText(file.workspacePath);
+                    const localHash = await generateSHA256Hash(localTextContent);
+
+                    const fileToCache: FileWithContent = {
+                        ...file,
+                        content: localTextContent,
+                    };
+
+                    if (localHash === file.hash) {
+                        this.fileCache.create(fileToCache);
                         return;
                     }
-                    const remoteContent = fileWithContent.content;
-                    const localContent = await this.storage.readText(file.workspacePath);
-                    if (remoteContent === localContent) {
+
+                    const remoteFile = await this.apiClient.fetchFile(file.id);
+                    const localStat = await this.storage.stat(file.workspacePath);
+                    const localFileMtime = new Date(localStat?.mtime ?? localStat?.ctime ?? 0);
+                    const remoteFileMtime = new Date(remoteFile.updatedAt);
+
+                    if (typeof remoteFile.content !== "string") {
+                        log.error(
+                            `critical error during conflict, expected "string" got ${typeof remoteFile.content}`,
+                        );
                         return;
                     }
 
-                    const stat = await this.storage.stat(file.workspacePath);
-                    const localFileMtime = new Date(stat?.mtime ?? stat?.ctime ?? 0);
-                    const remoteFileMtime = new Date(fileWithContent.updatedAt);
+                    // Handle conflict
+                    switch (this.options.conflictResolution) {
+                        case "merge": {
+                            const mergedContent = await this.modals.diffModal(
+                                file.workspacePath,
+                                {
+                                    content: localTextContent,
+                                    lastUpdate: localFileMtime,
+                                },
+                                {
+                                    content: remoteFile.content,
+                                    lastUpdate: remoteFileMtime,
+                                },
+                            );
 
-                    if (this.options.conflictResolution === "merge") {
-                        const mergedContent = await this.modals.diffModal(
-                            file.workspacePath,
-                            {
-                                content: localContent,
-                                lastUpdate: localFileMtime,
-                            },
-                            {
-                                content: remoteContent,
-                                lastUpdate: remoteFileMtime,
-                            },
-                        );
+                            log.debug(
+                                `handling conflict on file ${file.workspacePath}, using merge tool`,
+                            );
 
-                        log.debug(
-                            `handling conflict on file ${file.workspacePath}, using merge tool`,
-                        );
-                        this.fileCache.setById(file.id, {
-                            ...file,
-                            content: mergedContent,
-                        });
+                            fileToCache.content = mergedContent;
+                            this.fileCache.create(fileToCache);
 
-                        await this.storage.write(file.workspacePath, mergedContent, {
-                            force: true,
-                        });
+                            await this.storage.write(file.workspacePath, mergedContent, {
+                                force: true,
+                            });
 
-                        const chunks = computeDiff(remoteContent, mergedContent);
-                        if (chunks.length > 0) {
+                            const chunks = computeDiff(remoteFile.content, mergedContent);
+                            if (chunks.length > 0) {
+                                const msg: ChunkMessage = {
+                                    type: MessageType.Chunk,
+                                    fileId: file.id,
+                                    chunks,
+                                    version: file.version,
+                                };
+                                this.messageQueueRegistry.getDeque(file.id).addBack(msg);
+                                this.wsClient.sendMessage(msg);
+                            }
+                            break;
+                        }
+                        case "local": {
+                            const chunks = computeDiff(remoteFile.content, localTextContent);
+                            if (chunks.length === 0) {
+                                return;
+                            }
+
+                            log.debug(
+                                `handling conflict on file ${file.workspacePath}, overwriting remote copy`,
+                            );
+
+                            fileToCache.content = localTextContent;
+                            fileToCache.updatedAt = new Date(localStat?.mtime ?? "").toISOString();
+                            this.fileCache.create(fileToCache);
+
                             const msg: ChunkMessage = {
                                 type: MessageType.Chunk,
-                                fileId: fileWithContent.id,
+                                fileId: file.id,
                                 chunks,
-                                version: fileWithContent.version,
+                                version: file.version,
                             };
-                            this.messageQueueRegistry.getDeque(fileWithContent.id).addBack(msg);
                             this.wsClient.sendMessage(msg);
+                            break;
                         }
-                    } else if (this.options.conflictResolution === "remote") {
-                        log.debug(
-                            `handling conflict on file ${file.workspacePath}, overwriting local copy`,
-                        );
-                        this.fileCache.setById(file.id, {
-                            ...file,
-                            content: fileWithContent.content,
-                        });
-                        await this.storage.write(file.workspacePath, fileWithContent.content, {
-                            force: true,
-                        });
-                    } else if (this.options.conflictResolution === "local") {
-                        // target is local content
-                        const chunks = computeDiff(fileWithContent.content, localContent);
-                        if (chunks.length === 0) {
-                            return;
-                        }
+                        case "remote": {
+                            log.debug(
+                                `handling conflict on file ${file.workspacePath}, overwriting local copy`,
+                            );
+                            fileToCache.content = remoteFile.content;
+                            this.fileCache.create(fileToCache);
 
-                        log.debug(
-                            `handling conflict on file ${file.workspacePath}, overwriting remote copy`,
-                        );
-                        this.fileCache.setById(file.id, {
-                            ...file,
-                            updatedAt: new Date(stat?.mtime ?? "").toISOString(),
-                            content: localContent,
-                        });
-                        const msg: ChunkMessage = {
-                            type: MessageType.Chunk,
-                            fileId: fileWithContent.id,
-                            chunks,
-                            version: fileWithContent.version,
-                        };
-                        this.wsClient.sendMessage(msg);
-                    } else {
-                        log.warn(`conflict on file ${file.workspacePath} not solved`);
+                            await this.storage.write(file.workspacePath, remoteFile.content, {
+                                force: true,
+                            });
+                            break;
+                        }
+                        default:
+                            log.warn(
+                                `conflict on file ${file.workspacePath} not solved, invalid strategy ${this.options.conflictResolution}`,
+                            );
+                            break;
                     }
                 }
             });
@@ -485,7 +524,7 @@ export class Syncinator {
             return;
         }
 
-        if (!isTextFile(cachedFile.mimeType) || typeof cachedFile.content !== "string") {
+        if (!isTextMime(cachedFile.mimeType) || typeof cachedFile.content !== "string") {
             return;
         }
 
