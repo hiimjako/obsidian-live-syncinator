@@ -17,6 +17,10 @@ To test this plugin:
 1. Enable plugin in the settings
 1. Configure plugin
 
+# Disclaimer
+
+This is recreational software provided as-is, without any warranty. While the plugin is functional, I do not assume any responsibility for potential data loss or other issues that may arise from its use. Always maintain backups of your important data before using any synchronization tools.
+
 # TODO
 
 - Add sync for configurations
