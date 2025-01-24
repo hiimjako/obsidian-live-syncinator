@@ -9,8 +9,8 @@ import { type Deque, DequeRegistry } from "./messageQueue";
 import type { FileDiff } from "./modals/conflict";
 import type { Disk } from "./storage/storage";
 import { shallowEqualStrict } from "./utils/comparison";
-import { isTextFile as isTextMime } from "./utils/mime";
 import { generateSHA256Hash } from "./utils/crypto";
+import { isTextMime } from "./utils/mime";
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
