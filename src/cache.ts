@@ -1,4 +1,4 @@
-import type { FileWithContent } from "./api/api";
+import type { File, FileWithContent } from "./api/api";
 
 export class FileCache {
     private filepathToId: Map<string, number> = new Map();
@@ -112,10 +112,19 @@ export class FileCache {
         return items;
     }
 
-    dump() {
+    dumpFileWithContent(): FileWithContent[] {
         const output = [];
         for (const file of this.idToFile.values()) {
             output.push({ ...file });
+        }
+        return output;
+    }
+
+    dumpFile(): File[] {
+        const output = [];
+        for (const file of this.idToFile.values()) {
+            const { content, ...rest }: FileWithContent = file;
+            output.push(rest);
         }
         return output;
     }

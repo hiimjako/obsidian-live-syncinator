@@ -22,7 +22,7 @@ describe("FileCache", () => {
 
         fc.create(testFile);
 
-        assert.deepEqual(fc.dump(), [
+        assert.deepEqual(fc.dumpFileWithContent(), [
             {
                 id: 1,
                 diskPath: "",
@@ -59,13 +59,13 @@ describe("FileCache", () => {
 
         // delete
         fc.deleteById(1);
-        assert.deepEqual(fc.dump(), []);
+        assert.deepEqual(fc.dumpFileWithContent(), []);
 
         fc.create(testFile);
         assert.deepEqual(fc.hasById(1), true);
 
         fc.deleteByPath("foo.md");
-        assert.deepEqual(fc.dump(), []);
+        assert.deepEqual(fc.dumpFileWithContent(), []);
     });
 
     test("find", () => {

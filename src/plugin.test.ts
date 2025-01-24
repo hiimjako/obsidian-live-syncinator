@@ -121,6 +121,135 @@ describe("Plugin integration tests", () => {
             assert.equal(sendMessage.mock.callCount(), 0);
         });
 
+        test("should handle cache misalignment correctly", async () => {
+            // initializing a file in remote
+            const content = "lorem ipsum";
+            const remoteFilepath = "files/remote.md";
+            const localFilepath = "newFiles/local.md";
+
+            await storage.write(localFilepath, content);
+            await sleep(1000); // so the remote change is more recent
+            const remoteFile = await apiClient.createFile(remoteFilepath, content);
+
+            const filesPreInit = await storage.listFiles();
+            assert.equal(filesPreInit.length, 1);
+            assert.equal(filesPreInit[0].path, localFilepath);
+
+            // here I have a file in cache that doesn't exists on workspace
+            // it could happen in case the user removes a file manually with obsidian closed
+            await syncinator.init([
+                {
+                    ...remoteFile,
+                    workspacePath: localFilepath,
+                },
+                {
+                    id: 999999,
+                    diskPath: "",
+                    workspacePath: "deletedFile.md",
+                    mimeType: "text/",
+                    hash: "",
+                    createdAt: "",
+                    updatedAt: "",
+                    workspaceId: remoteFile.workspaceId,
+                    version: 1,
+                },
+            ]);
+
+            // checking cache
+            assert.deepEqual(syncinator.cacheDump(), [{ ...remoteFile, content }]);
+
+            // checking local vault
+            const files = await storage.listFiles();
+            assert.equal(files.length, 1);
+            assert.equal(files[0].path, remoteFilepath);
+
+            const fileContent = await storage.readText(remoteFilepath);
+            assert.equal(fileContent, content);
+        });
+
+        test("should rename local files renamed while offline", async () => {
+            // initializing a file in remote
+            const content = "lorem ipsum";
+            const remoteFilepath = "files/remote.md";
+            const localFilepath = "newFiles/local.md";
+
+            await storage.write(localFilepath, content);
+            await sleep(1000); // so the remote change is more recent
+            const remoteFile = await apiClient.createFile(remoteFilepath, content);
+
+            const filesPreInit = await storage.listFiles();
+            assert.equal(filesPreInit.length, 1);
+            assert.equal(filesPreInit[0].path, localFilepath);
+
+            await syncinator.init([
+                {
+                    ...remoteFile,
+                    workspacePath: localFilepath,
+                },
+            ]);
+
+            // checking cache
+            assert.deepEqual(syncinator.cacheDump(), [{ ...remoteFile, content }]);
+
+            // checking local vault
+            const files = await storage.listFiles();
+            assert.equal(files.length, 1);
+            assert.equal(files[0].path, remoteFilepath);
+
+            const fileContent = await storage.readText(remoteFilepath);
+            assert.equal(fileContent, content);
+        });
+
+        test("should rename remote files renamed while offline", async (t) => {
+            // initializing a file in remote
+            const content = "lorem ipsum";
+            const remoteFilepath = "files/remote.md";
+            const localFilepath = "newFiles/local.md";
+
+            const remoteFile = await apiClient.createFile(remoteFilepath, content);
+            await sleep(1000); // so the local change is more recent
+            await storage.write(localFilepath, content);
+
+            const filesPreInit = await storage.listFiles();
+            assert.equal(filesPreInit.length, 1);
+            assert.equal(filesPreInit[0].path, localFilepath);
+
+            const sendMessage = t.mock.method(wsClient, "sendMessage", () => {});
+
+            await syncinator.init([
+                {
+                    ...remoteFile,
+                    workspacePath: localFilepath,
+                },
+            ]);
+
+            // checking cache
+            assert.deepEqual(syncinator.cacheDump(), [
+                { ...remoteFile, workspacePath: localFilepath, content },
+            ]);
+
+            // checking local vault
+            const files = await storage.listFiles();
+            assert.equal(files.length, 1);
+            assert.equal(files[0].path, localFilepath);
+
+            const fileContent = await storage.readText(localFilepath);
+            assert.equal(fileContent, content);
+
+            const updatedFile = await apiClient.fetchFile(remoteFile.id);
+            assert.equal(updatedFile.workspacePath, localFilepath);
+
+            assert.equal(sendMessage.mock.callCount(), 1);
+            assert.deepEqual(sendMessage.mock.calls[0].arguments, [
+                {
+                    type: MessageType.Rename,
+                    fileId: remoteFile.id,
+                    objectType: "file",
+                    workspacePath: remoteFilepath,
+                },
+            ] as EventMessage[]);
+        });
+
         test("should post files not in remote", async (t) => {
             // initializing a file in local vault
             const content = "lorem ipsum";

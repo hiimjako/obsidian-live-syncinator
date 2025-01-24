@@ -68,7 +68,13 @@ export class Syncinator {
         this.options = opts;
     }
 
-    async init() {
+    async init(fileCacheDump: File[] = []) {
+        const fileCache: FileCache = new FileCache();
+        for (const file of fileCacheDump) {
+            fileCache.create({ ...file, content: "" });
+        }
+        this.fileCache = fileCache;
+
         await this.fetchRemoteFiles();
         await this.pushLocalFiles();
     }
@@ -106,6 +112,7 @@ export class Syncinator {
 
     /**
      * Publish to the server the local unsynchronized files
+     * This will update the fileCache
      */
     async fetchRemoteFiles() {
         try {
@@ -114,6 +121,35 @@ export class Syncinator {
             log.debug(files);
 
             const fetchRemotePromises = files.map(async (file) => {
+                const cachedFile = this.fileCache.getById(file.id);
+                if (cachedFile !== undefined && cachedFile.workspacePath !== file.workspacePath) {
+                    // The file was renamed while offline
+                    const localStat = await this.storage.stat(cachedFile.workspacePath);
+                    const localFileMtime = new Date(localStat?.mtime ?? localStat?.ctime ?? 0);
+                    const remoteFileMtime = new Date(file.updatedAt);
+
+                    try {
+                        if (localFileMtime > remoteFileMtime) {
+                            await this.apiClient.updateFile(file.id, cachedFile.workspacePath);
+
+                            const msg: EventMessage = {
+                                type: MessageType.Rename,
+                                fileId: file.id,
+                                objectType: "file",
+                                workspacePath: file.workspacePath,
+                            };
+                            this.wsClient.sendMessage(msg);
+
+                            file.workspacePath = cachedFile.workspacePath;
+                        } else {
+                            await this.storage.rename(cachedFile.workspacePath, file.workspacePath);
+                        }
+                    } catch (error) {
+                        log.error(error);
+                        return;
+                    }
+                }
+
                 const exists = await this.storage.exists(file.workspacePath);
 
                 // Handle new files
@@ -257,6 +293,14 @@ export class Syncinator {
             });
 
             await Promise.allSettled(fetchRemotePromises);
+
+            // remove the inconsistent cache files
+            const filesToRemove = this.fileCache.find((f) => {
+                return files.findIndex((ff) => ff.id === f.id) < 0;
+            });
+            for (const fileToRemove of filesToRemove) {
+                this.fileCache.deleteById(fileToRemove.id);
+            }
         } catch (error) {
             log.error("error while fetching remote files", error);
         }
@@ -565,8 +609,9 @@ export class Syncinator {
                 return;
             }
             try {
-                await this.apiClient.deleteFile(fileId);
+                // optimistic cache update, to keep the change offline
                 this.fileCache.deleteById(fileId);
+                await this.apiClient.deleteFile(fileId);
 
                 const msg: EventMessage = {
                     type: MessageType.Delete,
@@ -607,8 +652,9 @@ export class Syncinator {
         const fileToRename = this.fileCache.getByPath(oldPath);
         if (fileToRename) {
             try {
+                // optimistic cache update, to keep the change offline
+                this.fileCache.setPath(fileToRename.id, file.path);
                 const updatedFile = await this.apiClient.updateFile(fileToRename.id, file.path);
-                this.fileCache.setPath(fileToRename.id, updatedFile.workspacePath);
                 this.fileCache.setUpdatedAt(fileToRename.id, updatedFile.updatedAt);
 
                 const msg: EventMessage = {
@@ -638,15 +684,17 @@ export class Syncinator {
                 const newFilePath = oldFilePath.replace(oldPath, file.path);
 
                 try {
+                    // optimistic cache update, to keep the change offline
+                    // Update cache and storage with the new file path
+                    this.fileCache.setPath(fileToRename.id, newFilePath);
+                    this.storage.rename(oldFilePath, newFilePath);
+
                     const updatedFile = await this.apiClient.updateFile(
                         fileToRename.id,
                         newFilePath,
                     );
 
-                    // Update cache and storage with the new file path
                     this.fileCache.setUpdatedAt(fileToRename.id, updatedFile.updatedAt);
-                    this.fileCache.setPath(fileToRename.id, updatedFile.workspacePath);
-                    this.storage.rename(oldFilePath, updatedFile.workspacePath);
                 } catch (error) {
                     log.error(`Failed to update file "${fileToRename.id}": ${error.message}`);
                 }
@@ -677,8 +725,12 @@ export class Syncinator {
     }
     // ---------- END ---------
 
-    cacheDump() {
-        return this.fileCache.dump().sort((a, b) => a.id - b.id);
+    cacheDump(): FileWithContent[] {
+        return this.fileCache.dumpFileWithContent().sort((a, b) => a.id - b.id);
+    }
+
+    cacheDumpWithoutContent(): File[] {
+        return this.fileCache.dumpFile().sort((a, b) => a.id - b.id);
     }
 }
 
