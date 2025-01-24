@@ -368,24 +368,36 @@ describe("Plugin integration tests", () => {
             assert.deepEqual(syncinator.cacheDump(), [{ ...files[0], content: "lorem ipsum 3" }]);
 
             assert.strictEqual(sendMessage.mock.callCount(), 3);
-            assert.deepEqual(sendMessage.mock.calls[0].arguments[0], {
+
+            const eventById: Record<number, EventMessage> = {};
+            eventById[filesPreInit[0].id] = {
                 type: MessageType.Delete,
                 objectType: "file",
                 fileId: filesPreInit[0].id,
                 workspacePath: filesPreInit[0].workspacePath,
-            } as EventMessage);
-            assert.deepEqual(sendMessage.mock.calls[1].arguments[0], {
+            } as EventMessage;
+            eventById[filesPreInit[1].id] = {
                 type: MessageType.Delete,
                 objectType: "file",
                 fileId: filesPreInit[1].id,
                 workspacePath: filesPreInit[1].workspacePath,
-            } as EventMessage);
-            assert.deepEqual(sendMessage.mock.calls[2].arguments[0], {
+            } as EventMessage;
+            eventById[0] = {
                 type: MessageType.Delete,
                 objectType: "folder",
                 fileId: 0,
                 workspacePath: "folderToDelete",
-            } as EventMessage);
+            } as EventMessage;
+
+            for (let i = 0; i < sendMessage.mock.calls.length; i++) {
+                const call = sendMessage.mock.calls[i];
+                const args = call.arguments[0];
+                if (args === undefined) {
+                    assert.fail("unexpected undefined");
+                }
+
+                assert.deepEqual(eventById[args.fileId], args);
+            }
         });
 
         test("should rename a file on event 'rename'", async (t) => {

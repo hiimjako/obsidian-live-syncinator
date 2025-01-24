@@ -398,6 +398,7 @@ export class Syncinator {
             const newPath = fileApi.workspacePath;
 
             if (oldPath !== newPath) {
+                this.fileCache.setUpdatedAt(fileDesc.id, fileApi.updatedAt);
                 this.fileCache.setPath(fileDesc.id, newPath);
                 await this.storage.rename(oldPath, fileApi.workspacePath);
             }
