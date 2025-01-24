@@ -24,3 +24,4 @@ To test this plugin:
 - Add cursor of other clients
 - Add heartbeat on ws connection
 - Lazy load files in memory
+- Add a check on init on hash
