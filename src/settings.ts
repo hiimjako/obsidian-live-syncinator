@@ -19,7 +19,7 @@ export const DEFAULT_SETTINGS: PluginSettings = {
     workspaceName: "",
     workspacePass: "",
     logLevel: LogLevel.WARN,
-    conflictResolution: "remote",
+    conflictResolution: "merge",
 };
 
 export class SettingTab extends PluginSettingTab {
