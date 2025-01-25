@@ -38,7 +38,7 @@ export class WsClient {
     private ignoreReconnections = false;
     private options: Options = {
         maxReconnectAttempts: -1,
-        reconnectIntervalMs: 1000,
+        reconnectIntervalMs: 250,
     };
     private onOpenHandler?: () => void;
     private onCloseHandler?: () => void;
@@ -102,14 +102,14 @@ export class WsClient {
             log.info("WebSocket connected");
         };
 
-        this.ws.onclose = (event) => {
+        this.ws.onclose = async (event) => {
             this.isConnected = false;
             this.ws = null;
             if (!event.wasClean) {
                 log.error("WebSocket closed unexpectedly");
             }
             if (this.onCloseHandler) this.onCloseHandler();
-            this.reconnect();
+            await this.reconnect();
         };
 
         this.ws.onerror = (error) => {
@@ -143,22 +143,26 @@ export class WsClient {
         };
     }
 
-    reconnect() {
-        if (this.ws !== null && this.isConnected === false) {
+    async reconnect() {
+        if (this.ws !== null && this.isConnected === true) {
             log.warn("already connected");
+            return;
         }
-        const mra = this.options?.maxReconnectAttempts ?? -1;
+
+        if (this.ignoreReconnections) return;
+
+        const mra = this.options.maxReconnectAttempts ?? -1;
+        const rMs = this.options.reconnectIntervalMs ?? 250;
         const attemptsAllowed = this.reconnectAttempts < mra || mra === -1;
 
-        if (attemptsAllowed && !this.ignoreReconnections) {
-            setTimeout(() => {
-                if (this.ignoreReconnections) {
-                    return;
-                }
-                log.info("Reconnecting WebSocket...");
-                this.reconnectAttempts++;
-                this.connect();
-            }, this.options.reconnectIntervalMs);
+        if (attemptsAllowed) {
+            const backoffMs = Math.min(rMs * this.reconnectAttempts, 5_000);
+            log.info(
+                `Reconnecting WebSocket in ${backoffMs}ms, attempt: ${this.reconnectAttempts}`,
+            );
+            await sleep(backoffMs);
+            this.reconnectAttempts++;
+            this.connect();
         } else {
             log.error("WebSocket max reconnect attempts reached.");
         }
@@ -166,7 +170,7 @@ export class WsClient {
 
     close(stopReconnect = false) {
         this.isConnected = false;
-        if (stopReconnect && this.ignoreReconnections === false) {
+        if (stopReconnect) {
             this.ignoreReconnections = stopReconnect;
         }
         if (this.ws) {
@@ -236,4 +240,8 @@ class AsyncMessageQueue<T> {
         this.queue.shift();
         await this.processQueue();
     }
+}
+
+async function sleep(ms: number): Promise<void> {
+    return new Promise((resolve) => window.setTimeout(resolve, ms));
 }
