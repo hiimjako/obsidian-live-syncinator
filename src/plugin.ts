@@ -174,6 +174,9 @@ export class Syncinator {
                     // Handle conflict
                     switch (this.options.conflictResolution) {
                         case "merge": {
+                            log.debug(
+                                `handling conflict on file "${file.workspacePath}", using merge tool`,
+                            );
                             const mergedContent = await this.modals.diffModal(
                                 file.workspacePath,
                                 {
@@ -184,10 +187,6 @@ export class Syncinator {
                                     content: remoteFile.content,
                                     lastUpdate: remoteFileMtime,
                                 },
-                            );
-
-                            log.debug(
-                                `handling conflict on file "${file.workspacePath}", using merge tool`,
                             );
 
                             fileToCache.content = mergedContent;

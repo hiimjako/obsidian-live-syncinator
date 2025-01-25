@@ -1,5 +1,6 @@
 import { type Change, diffWords } from "diff";
 import { type App, Modal, Setting } from "obsidian";
+import { log } from "src/logger/logger";
 
 type Side = "local" | "remote" | "both";
 
@@ -37,13 +38,17 @@ export class DiffModal extends Modal {
     onOpen() {
         const { contentEl } = this;
 
+        // set a content, so onClose it will return something
+        this.mergedContent = this.local.content;
         if (contentEl.parentElement === null) {
+            log.error("error opening DiffModal, missing parent element on contentEL");
             this.close();
             return;
         }
         this.calculateDiffs();
         // one diff means no changes
         if (this.diffs.length === 1) {
+            log.debug("closing DiffModal, no diffs calculated");
             this.close();
             return;
         }
