@@ -532,9 +532,8 @@ export class Syncinator {
         const newContent = await this.storage.readText(file.path);
         const chunks = computeDiff(cachedFile.content, newContent);
 
-        cachedFile.content = newContent;
-        this.fileCache.setById(cachedFile.id, cachedFile);
-
+        // the cache content is not updated because we are still on older version
+        // it is updated only on ack.
         if (chunks.length > 0) {
             log.debug("modify", {
                 fileId: cachedFile.id,
