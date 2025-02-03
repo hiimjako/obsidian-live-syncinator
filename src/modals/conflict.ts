@@ -39,7 +39,7 @@ export class DiffModal extends Modal {
         const { contentEl } = this;
 
         // set a content, so onClose it will return something
-        this.mergedContent = this.local.content;
+        this.mergedContent = this.remote.content;
         if (contentEl.parentElement === null) {
             log.error("error opening DiffModal, missing parent element on contentEL");
             this.close();
