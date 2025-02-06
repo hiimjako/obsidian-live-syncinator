@@ -1,6 +1,6 @@
 {
 	"name": "obsidian-live-syncinator",
-	"version": "1.0.0",
+	"version": "0.0.1",
 	"description": "Plugin to sync obsidian workspaces",
 	"main": "main.js",
 	"scripts": {
