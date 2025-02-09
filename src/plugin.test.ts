@@ -4,6 +4,7 @@ import fs from "node:fs/promises";
 import { afterEach, beforeEach, describe, mock, test } from "node:test";
 import { promisify } from "node:util";
 import type { Vault } from "obsidian";
+import { arrayBufferToBase64, base64ToArrayBuffer } from "./utils/base64Utils";
 import { ApiClient, type WorkspaceCredentials } from "./api/api";
 import { HttpClient } from "./api/http";
 import { type ChunkMessage, type EventMessage, MessageType, WsClient } from "./api/ws";
@@ -175,6 +176,29 @@ describe("Plugin integration tests", () => {
             // checking local vault
             const fileContent = await storage.readText(filepath);
             assert.equal(fileContent, remoteContent);
+
+            assert.equal(sendMessage.mock.callCount(), 0);
+        });
+
+        test("should align binary files", async (t) => {
+            // initializing a file in remote
+            const localContent = base64ToArrayBuffer("JVBERi1sb2NhbA==");
+            const remoteContent = base64ToArrayBuffer("JVBERi1yZW1vdGU=");
+            const filepath = "files/binary_conflict.md";
+
+            const onlineFile = await apiClient.createFile(filepath, remoteContent);
+            await storage.write(filepath, localContent);
+
+            const sendMessage = t.mock.method(wsClient, "sendMessage", () => {});
+
+            await syncinator.init();
+
+            // checking cache
+            assert.deepEqual(syncinator.cacheDump(), [{ ...onlineFile, content: remoteContent }]);
+
+            // checking local vault
+            const fileContent = await storage.readBinary(filepath);
+            assert.deepEqual(fileContent, remoteContent);
 
             assert.equal(sendMessage.mock.callCount(), 0);
         });

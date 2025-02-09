@@ -135,7 +135,9 @@ export class Syncinator {
 
                     if (localHash !== file.hash) {
                         const remoteFile = await this.apiClient.fetchFile(file.id);
-                        await this.storage.write(file.workspacePath, remoteFile.content);
+                        await this.storage.write(file.workspacePath, remoteFile.content, {
+                            force: true,
+                        });
                         fileToCache.content = remoteFile.content;
                     }
 

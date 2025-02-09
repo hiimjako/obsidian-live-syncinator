@@ -1,6 +1,6 @@
 import assert from "node:assert";
 import { describe, test } from "node:test";
-import { base64ToArrayBuffer } from "./base64Utils";
+import { base64ToArrayBuffer } from "../utils/base64Utils";
 import { Multipart } from "./multipart";
 
 describe("Multipart", () => {

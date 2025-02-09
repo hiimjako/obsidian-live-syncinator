@@ -1,4 +1,4 @@
-import { arrayBufferToBase64, base64ToArrayBuffer } from "./base64Utils";
+import { arrayBufferToBase64, base64ToArrayBuffer } from "../utils/base64Utils";
 
 type FormField = {
     name: string;
