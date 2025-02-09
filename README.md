@@ -26,6 +26,6 @@ This is recreational software provided as-is, without any warranty. While the pl
 - Add sync for configurations
     - Add also a settings page to decide what to sync
 - Add cursor of other clients
-- Add heartbeat on ws connection
 - Lazy load files in memory
 - Fix file/folder rename on init
+- Add file snapshots
