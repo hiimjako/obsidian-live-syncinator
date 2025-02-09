@@ -30,4 +30,3 @@ This is recreational software provided as-is, without any warranty. While the pl
 - Lazy load files in memory
 - Fix file/folder rename on init
 - On modify check if the file it is a binary, in this case if the hash changed update the new binary.
-- Retry to send message on ws on slow connection.

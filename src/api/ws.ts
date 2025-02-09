@@ -1,4 +1,5 @@
 import { log } from "src/logger/logger";
+import { sleep } from "../utils/sleep";
 import type { DiffChunk } from "../diff/diff";
 
 export enum MessageType {
@@ -26,6 +27,14 @@ export interface EventMessage extends MessageHeader {
 type Options = {
     maxReconnectAttempts?: number;
     reconnectIntervalMs?: number;
+    maxRetryAttempts?: number;
+    retryIntervalMs?: number;
+};
+
+type RetryQueueItem = {
+    message: ChunkMessage | EventMessage;
+    attempts: number;
+    timestamp: number;
 };
 
 export class WsClient {
@@ -34,12 +43,13 @@ export class WsClient {
     private scheme: "ws" | "wss" = "ws";
     private jwtToken = "";
     private isConnected = false;
-    private reconnectAttempts = 0;
+    private reconnectAttempts = 1;
     private ignoreReconnections = false;
     private options: Options = {
         maxReconnectAttempts: -1,
         reconnectIntervalMs: 250,
     };
+    private retryQueue: RetryQueueItem[] = [];
     private onOpenHandler?: () => void;
     private onCloseHandler?: () => void;
     private onErrorHandler?: (e: globalThis.Event) => void;
@@ -97,9 +107,10 @@ export class WsClient {
 
         this.ws.onopen = () => {
             this.isConnected = true;
-            this.reconnectAttempts = 0;
+            this.reconnectAttempts = 1;
             if (this.onOpenHandler) this.onOpenHandler();
             log.info("WebSocket connected");
+            this.retryQueuedMessages();
         };
 
         this.ws.onclose = async (event) => {
@@ -168,6 +179,30 @@ export class WsClient {
         }
     }
 
+    private async retryQueuedMessages() {
+        if (this.retryQueue.length === 0) return;
+
+        log.info(`Retrying ${this.retryQueue.length} queued messages`);
+
+        const currentQueue = [...this.retryQueue];
+        this.retryQueue = [];
+
+        for (const item of currentQueue) {
+            try {
+                if (item.attempts < (this.options.maxRetryAttempts ?? 3)) {
+                    await this.sendMessageWithRetry(item.message, item.attempts);
+                } else {
+                    log.error(
+                        `Message dropped after ${item.attempts} retry attempts:`,
+                        item.message,
+                    );
+                }
+            } catch (error) {
+                log.error("Error retrying message:", error);
+            }
+        }
+    }
+
     close(stopReconnect = false) {
         this.isConnected = false;
         if (stopReconnect) {
@@ -179,15 +214,59 @@ export class WsClient {
         }
     }
 
-    sendMessage(msg: ChunkMessage | EventMessage) {
+    private async sendMessageWithRetry(
+        msg: ChunkMessage | EventMessage,
+        previousAttempts = 0,
+    ): Promise<void> {
         if (!this.isConnected) {
-            log.warn("WebSocket is not connected. Unable to send data.");
+            const queueItem: RetryQueueItem = {
+                message: msg,
+                attempts: previousAttempts + 1,
+                timestamp: Date.now(),
+            };
+
+            this.retryQueue.push(queueItem);
+            log.warn(
+                `WebSocket is not connected. Message queued for retry. Attempt ${queueItem.attempts}`,
+            );
             return;
         }
-        log.debug("[ws] sending message", msg);
 
-        const msgJson = JSON.stringify(msg);
-        this.ws?.send(msgJson);
+        try {
+            const msgJson = JSON.stringify(msg);
+            this.ws?.send(msgJson);
+            log.debug("[ws] message sent successfully:", msg);
+        } catch (error) {
+            log.error("Error sending message:", error);
+            throw error;
+        }
+    }
+
+    getRetryQueueStatus() {
+        return {
+            queueLength: this.retryQueue.length,
+            oldestMessage: this.retryQueue[0]?.timestamp,
+            messagesByType: this.retryQueue.reduce(
+                (acc, item) => {
+                    const type = MessageType[item.message.type];
+                    acc[type] = (acc[type] || 0) + 1;
+                    return acc;
+                },
+                {} as Record<string, number>,
+            ),
+        };
+    }
+
+    sendMessage(msg: ChunkMessage | EventMessage) {
+        this.sendMessageWithRetry(msg, 0).catch((error) => {
+            log.error("Failed to send or queue message:", error);
+        });
+    }
+
+    clearRetryQueue() {
+        const clearedCount = this.retryQueue.length;
+        this.retryQueue = [];
+        log.info(`Cleared ${clearedCount} messages from retry queue`);
     }
 }
 
@@ -240,8 +319,4 @@ class AsyncMessageQueue<T> {
         this.queue.shift();
         await this.processQueue();
     }
-}
-
-async function sleep(ms: number): Promise<void> {
-    return new Promise((resolve) => window.setTimeout(resolve, ms));
 }

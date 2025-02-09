@@ -11,8 +11,7 @@ import type { Disk } from "./storage/storage";
 import { shallowEqualStrict } from "./utils/comparison";
 import { generateSHA256Hash } from "./utils/crypto";
 import { isTextMime } from "./utils/mime";
-
-const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+import { sleep } from "./utils/sleep";
 
 export interface Events {
     create(file: TAbstractFile): Promise<void>;
