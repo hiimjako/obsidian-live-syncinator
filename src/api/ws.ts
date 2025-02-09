@@ -48,6 +48,8 @@ export class WsClient {
     private options: Options = {
         maxReconnectAttempts: -1,
         reconnectIntervalMs: 250,
+        maxRetryAttempts: -1,
+        retryIntervalMs: 250,
     };
     private retryQueue: RetryQueueItem[] = [];
     private onOpenHandler?: () => void;
