@@ -251,6 +251,7 @@ export class Syncinator {
                             );
                             break;
                     }
+                    return;
                 }
 
                 log.warn(`unexpected reconciliation status for "${file.workspacePath}"`);
