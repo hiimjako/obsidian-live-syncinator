@@ -4,7 +4,7 @@ import fs from "node:fs/promises";
 import { afterEach, beforeEach, describe, mock, test } from "node:test";
 import { promisify } from "node:util";
 import type { Vault } from "obsidian";
-import { arrayBufferToBase64, base64ToArrayBuffer } from "./utils/base64Utils";
+import { base64ToArrayBuffer } from "./utils/base64Utils";
 import { ApiClient, type WorkspaceCredentials } from "./api/api";
 import { HttpClient } from "./api/http";
 import { type ChunkMessage, type EventMessage, MessageType, WsClient } from "./api/ws";
@@ -569,6 +569,38 @@ describe("Plugin integration tests", () => {
             assert.deepEqual(syncinator.cacheDump(), [{ ...files[0], content: newContent }]);
         });
 
+        test("should ACK message on 'modify'", async () => {
+            const content = "lorem ipsum";
+            const newContent = "lorem bar ipsum";
+            const filepath = "files/file.md";
+
+            const filesPreInit = await apiClient.fetchFiles();
+            assert.equal(filesPreInit.length, 0);
+
+            await storage.write(filepath, content);
+            await syncinator.init();
+
+            // checking cache
+            const files = await apiClient.fetchFiles();
+            assert.equal(files.length, 1);
+
+            assert.deepEqual(syncinator.cacheDump(), [{ ...files[0], content: content }]);
+
+            await storage.write(filepath, newContent, { force: true });
+            await syncinator.events.modify({
+                path: filepath,
+                vault: vault,
+                parent: null,
+                name: "file.md",
+            });
+
+            await sleep(500);
+
+            assert.deepEqual(syncinator.cacheDump(), [
+                { ...files[0], version: 1, content: newContent },
+            ]);
+        });
+
         test("should create a file on 'create'", async (_t) => {
             const content = "lorem ipsum";
             const filepath = "files/file.md";
@@ -792,5 +824,147 @@ describe("Plugin integration tests", () => {
                 { ...files[2], content: "lorem ipsum 3" },
             ]);
         });
+    });
+});
+
+describe("concurrent modifications", () => {
+    let vaultRootDir1: string;
+    let vaultRootDir2: string;
+
+    let vault1: Vault;
+    let vault2: Vault;
+
+    let storage1: Disk;
+    let storage2: Disk;
+
+    let apiClient1: ApiClient;
+    let wsClient1: WsClient;
+
+    let apiClient2: ApiClient;
+    let wsClient2: WsClient;
+
+    let syncinator1: Syncinator;
+    let syncinator2: Syncinator;
+
+    beforeEach(async () => {
+        vaultRootDir1 = await fs.mkdtemp("/tmp/storage_test_1");
+        vault1 = CreateVaultMock(vaultRootDir1);
+        vaultRootDir2 = await fs.mkdtemp("/tmp/storage_test_2");
+        vault2 = CreateVaultMock(vaultRootDir2);
+
+        storage1 = new Disk(vault1);
+        storage2 = new Disk(vault2);
+
+        const credentials = createNewUser();
+        const httpClient = new HttpClient("http", "127.0.0.1:8080", {});
+
+        apiClient1 = new ApiClient(httpClient);
+        apiClient2 = new ApiClient(httpClient);
+        const token = await apiClient1.login(credentials.name, credentials.password);
+
+        wsClient1 = new WsClient("ws", "127.0.0.1:8080", {
+            maxReconnectAttempts: 0,
+        });
+        wsClient2 = new WsClient("ws", "127.0.0.1:8080", {
+            maxReconnectAttempts: 0,
+        });
+
+        apiClient1.setAuthorizationHeader(token.token);
+        apiClient2.setAuthorizationHeader(token.token);
+        wsClient1.setAuthorization(token.token);
+        wsClient2.setAuthorization(token.token);
+
+        syncinator1 = new Syncinator(
+            storage1,
+            apiClient1,
+            wsClient1,
+            {
+                diffModal: async () => {
+                    return "";
+                },
+            },
+            {
+                conflictResolution: "remote",
+            },
+        );
+
+        syncinator2 = new Syncinator(
+            storage2,
+            apiClient2,
+            wsClient2,
+            {
+                diffModal: async () => {
+                    return "";
+                },
+            },
+            {
+                conflictResolution: "remote",
+            },
+        );
+    });
+
+    afterEach(async () => {
+        await fs.rm(vaultRootDir1, { recursive: true, force: true });
+        await fs.rm(vaultRootDir2, { recursive: true, force: true });
+        wsClient1.close();
+        wsClient2.close();
+        mock.restoreAll();
+    });
+
+    test("should handle concurrent modifications from different clients", async () => {
+        const initialContent = "initial content";
+        const filepath = "files/concurrent.md";
+
+        // Create initial file
+        const _ = await apiClient1.createFile(filepath, initialContent);
+        await syncinator1.init();
+        await syncinator2.init();
+
+        // Simulate concurrent modifications
+        const clientModification = "client modification";
+        const secondWorkspaceChange = "server update";
+
+        // Client starts modifying
+        await storage1.write(filepath, clientModification, { force: true });
+        await syncinator1.events.modify({
+            path: filepath,
+            vault: vault1,
+            parent: null,
+            name: "concurrent.md",
+        });
+
+        // Server sends a modification before client's change is acknowledged
+        await storage2.write(filepath, secondWorkspaceChange, { force: true });
+        await syncinator2.events.modify({
+            path: filepath,
+            vault: vault2,
+            parent: null,
+            name: "concurrent.md",
+        });
+
+        await sleep(2_000);
+
+        // Verify final state
+        const finalContent1 = await storage1.readText(filepath);
+        const cacheState1 = syncinator1.cacheDump();
+
+        const finalContent2 = await storage2.readText(filepath);
+        const cacheState2 = syncinator2.cacheDump();
+
+        console.log(finalContent1);
+        console.log(finalContent2);
+        console.log(clientModification);
+        console.log(secondWorkspaceChange);
+
+        console.log(cacheState1);
+        console.log(cacheState2);
+
+        assert.equal(cacheState1.length, 1);
+        assert.equal(cacheState2.length, 1);
+        assert.equal(cacheState1[0].content, finalContent1);
+        assert.equal(cacheState2[0].content, finalContent2);
+
+        assert.equal(cacheState1[0].content, cacheState2[0].content);
+        assert.equal(finalContent1, finalContent2);
     });
 });

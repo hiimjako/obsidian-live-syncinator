@@ -4,7 +4,7 @@ import { log } from "src/logger/logger";
 import type { ApiClient, File, FileWithContent } from "./api/api";
 import { type ChunkMessage, type EventMessage, MessageType, type WsClient } from "./api/ws";
 import { FileCache } from "./cache";
-import { type DiffChunk, computeDiff, invertDiff } from "./diff/diff";
+import { type DiffChunk, applyDiff, applyDiffs, computeDiff, invertDiff } from "./diff/diff";
 import { type Deque, DequeRegistry } from "./messageQueue";
 import type { FileDiff } from "./modals/conflict";
 import type { Disk } from "./storage/storage";
@@ -37,7 +37,6 @@ export class Syncinator {
     private messageQueueRegistry = new DequeRegistry<number, ChunkMessage>();
     options: Options = { conflictResolution: "remote" };
     modals: Modals;
-    private lockedFiles = new Set<number>();
 
     events: Events;
 
@@ -265,15 +264,6 @@ export class Syncinator {
 
     // ---------- ChunkMessage ---------
     async handleChunkMessage(data: ChunkMessage) {
-        const { fileId } = data;
-
-        if (this.lockedFiles.has(fileId)) {
-            log.error(`file ${fileId} already locked!`);
-            return;
-        }
-
-        this.lockedFiles.add(fileId);
-
         try {
             const { fileId, version } = data;
             const file = this.fileCache.getById(fileId);
@@ -282,34 +272,36 @@ export class Syncinator {
                 throw new Error(`File '${fileId}' not found`);
             }
 
+            let updatedContent = file.content;
             const deque = this.messageQueueRegistry.getDeque(fileId);
             const isAckMessage = !deque.isEmpty() && isSameChunkMessage(data, deque.peekFront());
             if (isAckMessage) {
-                this.handleAckMessage(file, version, deque);
-                return;
+                updatedContent = applyDiffs(file.content as string, data.chunks);
+                this.handleAckMessage(file, deque);
+            } else {
+                // reverting the optimistic changes
+                if (!deque.isEmpty()) {
+                    await this.handleOutOfSyncChunks(file, deque);
+                }
+
+                const chunksToPersist = await this.getChunksToPersist(data, file);
+                updatedContent = await this.storage.persistChunks(
+                    file.workspacePath,
+                    chunksToPersist,
+                );
             }
 
-            // reverting the optimistic changes
-            if (!deque.isEmpty()) {
-                await this.handleOutOfSyncChunks(file, deque);
-            }
-
-            const chunksToPersist = await this.getChunksToPersist(data, file);
-            const content = await this.storage.persistChunks(file.workspacePath, chunksToPersist);
 
             file.version = version;
-            file.content = content;
+            file.content = updatedContent;
             this.fileCache.setById(file.id, file);
         } catch (error) {
             log.error(error);
-        } finally {
-            this.lockedFiles.delete(fileId);
         }
     }
 
-    private handleAckMessage(file: File, version: number, deque: Deque<ChunkMessage>): void {
+    private handleAckMessage(file: File, deque: Deque<ChunkMessage>): void {
         log.debug(`[onChunkMessage] ack message ${file.workspacePath} ${file.id}`);
-        this.fileCache.setVersion(file.id, version);
         deque.removeFront();
     }
 
@@ -518,12 +510,6 @@ export class Syncinator {
         const cachedFile = this.fileCache.getByPath(file.path);
         if (cachedFile == null) {
             log.error(`file '${file.path}' not found`);
-            return;
-        }
-
-        // FIXME: with this method if another client continues to write I will never
-        // acquire the lock
-        if (this.lockedFiles.has(cachedFile.id)) {
             return;
         }
 

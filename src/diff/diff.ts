@@ -43,6 +43,14 @@ export function computeDiff(oldStr: string, newStr: string): DiffChunk[] {
     return diffs;
 }
 
+export function applyDiffs(text: string, diffs: DiffChunk[]): string {
+    let updatedText = text;
+    for (let i = 0; i < diffs.length; i++) {
+        updatedText = applyDiff(updatedText, diffs[i]);
+    }
+    return updatedText;
+}
+
 export function applyDiff(text: string, diff: DiffChunk): string {
     switch (diff.type) {
         case Operation.Add:
