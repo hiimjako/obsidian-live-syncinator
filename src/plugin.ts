@@ -28,6 +28,10 @@ export interface Options {
 interface Modals {
     diffModal(filename: string, local: FileDiff, remote: FileDiff): Promise<string>;
 }
+interface PendingModification {
+    fileId: number;
+    promise: Promise<void>;
+}
 
 export class Syncinator {
     private storage: Disk;
@@ -37,6 +41,7 @@ export class Syncinator {
     private messageQueueRegistry = new DequeRegistry<number, ChunkMessage>();
     options: Options = { conflictResolution: "remote" };
     modals: Modals;
+    private pendingModifications: Map<number, PendingModification> = new Map();
 
     events: Events;
 
@@ -272,6 +277,15 @@ export class Syncinator {
                 throw new Error(`File '${fileId}' not found`);
             }
 
+            if (version < file.version) {
+                log.warn(`recived old message from ws: ${version} current ${file.version}`);
+            }
+
+            const pending = this.pendingModifications.get(fileId);
+            if (pending) {
+                await pending.promise;
+            }
+
             let updatedContent = file.content;
             const deque = this.messageQueueRegistry.getDeque(fileId);
             const isAckMessage = !deque.isEmpty() && isSameChunkMessage(data, deque.peekFront());
@@ -290,7 +304,6 @@ export class Syncinator {
                     chunksToPersist,
                 );
             }
-
 
             file.version = version;
             file.content = updatedContent;
@@ -517,26 +530,44 @@ export class Syncinator {
             return;
         }
 
-        const newContent = await this.storage.readText(file.path);
-        const chunks = computeDiff(cachedFile.content, newContent);
+        let resolveModification: () => void;
+        const modificationPromise = new Promise<void>((resolve) => {
+            resolveModification = resolve;
+        });
 
-        // the cache content is not updated because we are still on older version
-        // it is updated only on ack.
-        if (chunks.length > 0) {
-            log.debug("modify", {
-                fileId: cachedFile.id,
-                chunks,
-                newContent,
-            });
+        // Store the pending modification
+        this.pendingModifications.set(cachedFile.id, {
+            fileId: cachedFile.id,
+            promise: modificationPromise,
+        });
 
-            const msg: ChunkMessage = {
-                type: MessageType.Chunk,
-                fileId: cachedFile.id,
-                chunks,
-                version: cachedFile.version,
-            };
-            this.messageQueueRegistry.getDeque(cachedFile.id).addBack(msg);
-            this.wsClient.sendMessage(msg);
+        try {
+            const newContent = await this.storage.readText(file.path);
+            const chunks = computeDiff(cachedFile.content, newContent);
+
+            // the cache content is not updated because we are still on older version
+            // it is updated only on ack.
+            if (chunks.length > 0) {
+                log.debug("modify", {
+                    fileId: cachedFile.id,
+                    chunks,
+                    newContent,
+                });
+
+                const msg: ChunkMessage = {
+                    type: MessageType.Chunk,
+                    fileId: cachedFile.id,
+                    chunks,
+                    version: cachedFile.version,
+                };
+                this.messageQueueRegistry.getDeque(cachedFile.id).addBack(msg);
+                this.wsClient.sendMessage(msg);
+            }
+        } finally {
+            // Always clean up and resolve the promise
+            // biome-ignore lint/style/noNonNullAssertion: <explanation>
+            resolveModification!();
+            this.pendingModifications.delete(cachedFile.id);
         }
     }
 
