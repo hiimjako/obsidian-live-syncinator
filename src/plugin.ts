@@ -28,10 +28,6 @@ export interface Options {
 interface Modals {
     diffModal(filename: string, local: FileDiff, remote: FileDiff): Promise<string>;
 }
-interface PendingModification {
-    fileId: number;
-    promise: Promise<void>;
-}
 
 export class Syncinator {
     private storage: Disk;
@@ -41,7 +37,7 @@ export class Syncinator {
     private messageQueueRegistry = new DequeRegistry<number, ChunkMessage>();
     options: Options = { conflictResolution: "remote" };
     modals: Modals;
-    private pendingModifications: Map<number, PendingModification> = new Map();
+    private pendingModifications: Map<number, Promise<void>> = new Map();
 
     events: Events;
 
@@ -283,7 +279,7 @@ export class Syncinator {
 
             const pending = this.pendingModifications.get(fileId);
             if (pending) {
-                await pending.promise;
+                await pending;
             }
 
             let updatedContent = file.content;
@@ -552,10 +548,7 @@ export class Syncinator {
         });
 
         // Store the pending modification
-        this.pendingModifications.set(cachedFile.id, {
-            fileId: cachedFile.id,
-            promise: modificationPromise,
-        });
+        this.pendingModifications.set(cachedFile.id, modificationPromise);
 
         try {
             const newContent = await this.storage.readText(file.path);
