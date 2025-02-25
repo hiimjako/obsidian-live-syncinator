@@ -1,6 +1,13 @@
 import assert from "node:assert";
 import { describe, test } from "node:test";
-import { Operation, applyDiff, computeDiff, invertDiff } from "../diff/diff";
+import {
+    Operation,
+    applyDiff,
+    computeDiff,
+    invertDiff,
+    transform,
+    transformMultiple,
+} from "../diff/diff";
 import type { DiffChunk } from "../diff/diff";
 
 describe("compute diff should be compliant with server implemenation", () => {
@@ -161,6 +168,134 @@ describe("inverseDiff", () => {
 
             resultText = applyDiff(resultText, invert);
             assert.strictEqual(resultText, update);
+        });
+    }
+});
+
+describe("transform", () => {
+    const tests = [
+        {
+            name: "Insert before Insert",
+            op1: { type: Operation.Add, position: 3, text: "abc", len: 3 } as DiffChunk,
+            op2: { type: Operation.Add, position: 5, text: "xyz", len: 3 } as DiffChunk,
+            expected: { type: Operation.Add, position: 8, text: "xyz", len: 3 } as DiffChunk,
+        },
+        {
+            name: "Insert at same position",
+            op1: { type: Operation.Add, position: 5, text: "abc", len: 3 } as DiffChunk,
+            op2: { type: Operation.Add, position: 5, text: "xyz", len: 3 } as DiffChunk,
+            expected: { type: Operation.Add, position: 8, text: "xyz", len: 3 } as DiffChunk,
+        },
+        {
+            name: "Insert before Remove",
+            op1: { type: Operation.Add, position: 3, text: "abc", len: 3 } as DiffChunk,
+            op2: { type: Operation.Remove, position: 5, text: "xyz", len: 3 } as DiffChunk,
+            expected: { type: Operation.Remove, position: 8, text: "xyz", len: 3 } as DiffChunk,
+        },
+        {
+            name: "Remove before Insert",
+            op1: { type: Operation.Remove, position: 3, text: "abc", len: 3 } as DiffChunk,
+            op2: { type: Operation.Add, position: 6, text: "xyz", len: 3 } as DiffChunk,
+            expected: { type: Operation.Add, position: 3, text: "xyz", len: 3 } as DiffChunk,
+        },
+        {
+            name: "Remove overlapping Remove",
+            op1: { type: Operation.Remove, position: 3, text: "bcd", len: 3 } as DiffChunk,
+            op2: { type: Operation.Remove, position: 2, text: "abcd", len: 4 } as DiffChunk,
+            expected: { type: Operation.Remove, position: 2, text: "a", len: 1 } as DiffChunk,
+        },
+        {
+            name: "Remove non-overlapping Remove",
+            op1: { type: Operation.Remove, position: 3, text: "abc", len: 3 } as DiffChunk,
+            op2: { type: Operation.Remove, position: 6, text: "xyz", len: 3 } as DiffChunk,
+            expected: { type: Operation.Remove, position: 3, text: "xyz", len: 3 } as DiffChunk,
+        },
+        {
+            name: "Insert after Remove",
+            op1: { type: Operation.Remove, position: 3, text: "abc", len: 3 } as DiffChunk,
+            op2: { type: Operation.Add, position: 6, text: "xyz", len: 3 } as DiffChunk,
+            expected: { type: Operation.Add, position: 3, text: "xyz", len: 3 } as DiffChunk,
+        },
+    ];
+
+    for (const { name, op1, op2, expected } of tests) {
+        test(name, () => {
+            const result = transform(op1, op2);
+            assert.deepEqual(result, expected);
+        });
+    }
+});
+
+describe("UTF-16 transform", () => {
+    const tests = [
+        {
+            name: "Transform with emoji insertion",
+            op1: { type: Operation.Add, position: 3, text: "👋", len: 1 } as DiffChunk,
+            op2: { type: Operation.Add, position: 5, text: "world", len: 5 } as DiffChunk,
+            expected: { type: Operation.Add, position: 6, text: "world", len: 5 } as DiffChunk,
+        },
+        {
+            name: "Transform with combining characters",
+            op1: { type: Operation.Add, position: 3, text: "é", len: 1 } as DiffChunk,
+            op2: { type: Operation.Remove, position: 4, text: "test", len: 4 } as DiffChunk,
+            expected: { type: Operation.Remove, position: 5, text: "test", len: 4 } as DiffChunk,
+        },
+        {
+            name: "Transform with zero-width joiner sequence",
+            op1: { type: Operation.Add, position: 3, text: "👨", len: 5 } as DiffChunk,
+            op2: { type: Operation.Add, position: 4, text: "test", len: 4 } as DiffChunk,
+            expected: { type: Operation.Add, position: 9, text: "test", len: 4 } as DiffChunk,
+        },
+    ];
+
+    for (const { name, op1, op2, expected } of tests) {
+        test(name, () => {
+            const result = transform(op1, op2);
+            assert.deepEqual(result, expected);
+        });
+    }
+});
+
+describe("transformMultiple", () => {
+    const tests = [
+        {
+            name: "Add and Remove interleaved",
+            text: "foo",
+            result: "foobarbaz",
+            opList1: [
+                { type: Operation.Add, position: 0, text: "foo", len: 3 } as DiffChunk,
+                { type: Operation.Add, position: 3, text: "bar", len: 3 } as DiffChunk,
+            ],
+            opList2: [
+                { type: Operation.Remove, position: 0, text: "foo", len: 3 } as DiffChunk,
+                { type: Operation.Add, position: 0, text: "baz", len: 3 } as DiffChunk,
+            ],
+            expected: [
+                { type: Operation.Remove, position: 6, text: "foo", len: 3 } as DiffChunk,
+                { type: Operation.Add, position: 6, text: "baz", len: 3 } as DiffChunk,
+            ],
+        },
+    ];
+
+    for (const { name, text, opList1, opList2, expected, result } of tests) {
+        test(name, () => {
+            const transformed = transformMultiple(opList1, opList2);
+            assert.deepEqual(transformed, expected);
+
+            // Apply operations and verify the result
+            let currentText = text;
+
+            // Apply opList1
+            for (const op of opList1) {
+                currentText = applyDiff(currentText, op);
+            }
+
+            // Apply transformed opList2
+            for (const op of transformed) {
+                currentText = applyDiff(currentText, op);
+            }
+
+            assert.strictEqual(currentText, result);
         });
     }
 });

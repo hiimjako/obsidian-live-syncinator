@@ -91,3 +91,77 @@ export function invertDiff(diff: DiffChunk): DiffChunk {
 
     return inverted;
 }
+
+export function transform(lastOp: DiffChunk, opToTransform: DiffChunk): DiffChunk {
+    const transformed: DiffChunk = { ...opToTransform };
+
+    switch (lastOp.type) {
+        case Operation.Add:
+            switch (opToTransform.type) {
+                case Operation.Add:
+                    if (lastOp.position <= opToTransform.position) {
+                        transformed.position += lastOp.len;
+                    }
+                    break;
+                case Operation.Remove:
+                    if (lastOp.position <= opToTransform.position) {
+                        transformed.position += lastOp.len;
+                    }
+                    break;
+            }
+            break;
+        case Operation.Remove:
+            switch (opToTransform.type) {
+                case Operation.Add:
+                    if (lastOp.position < opToTransform.position) {
+                        transformed.position -= Math.min(
+                            lastOp.len,
+                            opToTransform.position - lastOp.position,
+                        );
+                    }
+                    break;
+                case Operation.Remove:
+                    if (
+                        lastOp.position < opToTransform.position + opToTransform.len &&
+                        lastOp.position + lastOp.len > opToTransform.position
+                    ) {
+                        const startOverlap = Math.max(lastOp.position, opToTransform.position);
+                        const endOverlap = Math.min(
+                            lastOp.position + lastOp.len,
+                            opToTransform.position + opToTransform.len,
+                        );
+                        const overlapStartInOpToTransform = startOverlap - opToTransform.position;
+                        const overlapEndInOpToTransform = endOverlap - opToTransform.position;
+
+                        // Use Array.from to properly handle Unicode characters
+                        const opToTransformChars = Array.from(opToTransform.text);
+                        const opToTransformTextParts = [
+                            ...opToTransformChars.slice(0, overlapStartInOpToTransform),
+                            ...opToTransformChars.slice(overlapEndInOpToTransform),
+                        ];
+
+                        transformed.position = Math.min(opToTransform.position, lastOp.position);
+                        transformed.len -= endOverlap - startOverlap;
+                        transformed.text = opToTransformTextParts.join("");
+                    } else if (lastOp.position <= opToTransform.position) {
+                        transformed.position -= lastOp.len;
+                    }
+                    break;
+            }
+            break;
+    }
+
+    return transformed;
+}
+
+export function transformMultiple(opList1: DiffChunk[], opList2: DiffChunk[]): DiffChunk[] {
+    const transformedOps: DiffChunk[] = [...opList2];
+
+    for (let i = 0; i < opList1.length; i++) {
+        for (let j = 0; j < transformedOps.length; j++) {
+            transformedOps[j] = transform(opList1[i], transformedOps[j]);
+        }
+    }
+
+    return transformedOps;
+}
