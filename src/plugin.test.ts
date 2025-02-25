@@ -971,4 +971,71 @@ describe("concurrent modifications", () => {
         const fileContent = await apiClient1.fetchFile(file.id);
         assert.equal(fileContent.content, finalContent1);
     });
+
+    test("should handle multiple concurrent modifications from different clients", async () => {
+        const initialContent = "initial content";
+        const filepath = "files/concurrent.md";
+
+        // Create initial file
+        const file = await apiClient1.createFile(filepath, initialContent);
+        await syncinator1.init();
+        await syncinator2.init();
+
+        // check initial status
+        const initialContent1 = await storage1.readText(filepath);
+        const initialContent2 = await storage2.readText(filepath);
+        assert.equal(initialContent, initialContent1);
+        assert.equal(initialContent1, initialContent2);
+
+        const numberOfModifications = 10;
+        const syncinator1Promises = [];
+        const syncinator2Promises = [];
+
+        const performModification = async (
+            storage: Disk,
+            vault: Vault,
+            syncinator: Syncinator,
+            modificationNumber: number,
+        ) => {
+            const modificationContent = `modification ${modificationNumber} from syncinator ${syncinator === syncinator1 ? "1" : "2"}`;
+            await storage.write(filepath, modificationContent, { force: true });
+            await syncinator.events.modify({
+                path: filepath,
+                vault: vault,
+                parent: null,
+                name: "concurrent.md",
+            });
+        };
+
+        for (let i = 1; i <= numberOfModifications; i++) {
+            syncinator1Promises.push(performModification(storage1, vault1, syncinator1, i));
+            syncinator2Promises.push(performModification(storage2, vault2, syncinator2, i));
+        }
+
+        await Promise.all([...syncinator1Promises, ...syncinator2Promises]);
+
+        await sleep(5_000);
+
+        // Verify final state
+        const finalContent1 = await storage1.readText(filepath);
+        const cacheState1 = syncinator1.cacheDump();
+
+        const finalContent2 = await storage2.readText(filepath);
+        const cacheState2 = syncinator2.cacheDump();
+
+        // Assertions to verify synchronization worked properly
+        assert.equal(cacheState1.length, 1);
+        assert.equal(cacheState2.length, 1);
+        assert.equal(cacheState1[0].content, finalContent1);
+        assert.equal(cacheState2[0].content, finalContent2);
+
+        // Both syncinator should have the same final content
+        assert.equal(cacheState1[0].content, cacheState2[0].content);
+        assert.equal(finalContent1, finalContent2);
+        assert.notEqual(finalContent1, initialContent);
+
+        // Verify server state matches client state
+        const fileContent = await apiClient1.fetchFile(file.id);
+        assert.equal(fileContent.content, finalContent1);
+    });
 });
