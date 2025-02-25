@@ -8,7 +8,7 @@ import { base64ToArrayBuffer } from "./utils/base64Utils";
 import { ApiClient, type WorkspaceCredentials } from "./api/api";
 import { HttpClient } from "./api/http";
 import { type ChunkMessage, type EventMessage, MessageType, WsClient } from "./api/ws";
-import { computeDiff } from "./diff/diff";
+import { applyDiffs, computeDiff } from "./diff/diff";
 import { Syncinator } from "./plugin";
 import { Disk } from "./storage/storage";
 import { CreateVaultMock } from "./storage/storage.mock";
@@ -916,33 +916,41 @@ describe("concurrent modifications", () => {
         const filepath = "files/concurrent.md";
 
         // Create initial file
-        const _ = await apiClient1.createFile(filepath, initialContent);
+        const file = await apiClient1.createFile(filepath, initialContent);
         await syncinator1.init();
         await syncinator2.init();
+
+        // check initial status
+        const initialContent1 = await storage1.readText(filepath);
+        const initialContent2 = await storage2.readText(filepath);
+        assert.equal(initialContent, initialContent1);
+        assert.equal(initialContent1, initialContent2);
 
         // Simulate concurrent modifications
         const clientModification = "client modification";
         const secondWorkspaceChange = "server update";
 
-        // Client starts modifying
         await storage1.write(filepath, clientModification, { force: true });
-        await syncinator1.events.modify({
-            path: filepath,
-            vault: vault1,
-            parent: null,
-            name: "concurrent.md",
-        });
-
-        // Server sends a modification before client's change is acknowledged
         await storage2.write(filepath, secondWorkspaceChange, { force: true });
-        await syncinator2.events.modify({
-            path: filepath,
-            vault: vault2,
-            parent: null,
-            name: "concurrent.md",
-        });
 
-        await sleep(2_000);
+        // Client starts modifying
+        // Server sends a modification before client's change is acknowledged
+        await Promise.all([
+            syncinator1.events.modify({
+                path: filepath,
+                vault: vault1,
+                parent: null,
+                name: "concurrent.md",
+            }),
+            syncinator2.events.modify({
+                path: filepath,
+                vault: vault2,
+                parent: null,
+                name: "concurrent.md",
+            }),
+        ]);
+
+        await sleep(500);
 
         // Verify final state
         const finalContent1 = await storage1.readText(filepath);
@@ -951,14 +959,6 @@ describe("concurrent modifications", () => {
         const finalContent2 = await storage2.readText(filepath);
         const cacheState2 = syncinator2.cacheDump();
 
-        console.log(finalContent1);
-        console.log(finalContent2);
-        console.log(clientModification);
-        console.log(secondWorkspaceChange);
-
-        console.log(cacheState1);
-        console.log(cacheState2);
-
         assert.equal(cacheState1.length, 1);
         assert.equal(cacheState2.length, 1);
         assert.equal(cacheState1[0].content, finalContent1);
@@ -966,5 +966,9 @@ describe("concurrent modifications", () => {
 
         assert.equal(cacheState1[0].content, cacheState2[0].content);
         assert.equal(finalContent1, finalContent2);
+        assert.notEqual(finalContent1, initialContent);
+
+        const fileContent = await apiClient1.fetchFile(file.id);
+        assert.equal(fileContent.content, finalContent1);
     });
 });

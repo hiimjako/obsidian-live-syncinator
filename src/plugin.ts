@@ -4,7 +4,7 @@ import { log } from "src/logger/logger";
 import type { ApiClient, File, FileWithContent } from "./api/api";
 import { type ChunkMessage, type EventMessage, MessageType, type WsClient } from "./api/ws";
 import { FileCache } from "./cache";
-import { type DiffChunk, applyDiff, applyDiffs, computeDiff, invertDiff } from "./diff/diff";
+import { type DiffChunk, applyDiffs, computeDiff, invertDiff, transform } from "./diff/diff";
 import { type Deque, DequeRegistry } from "./messageQueue";
 import type { FileDiff } from "./modals/conflict";
 import type { Disk } from "./storage/storage";
@@ -321,11 +321,27 @@ export class Syncinator {
     private async handleOutOfSyncChunks(file: File, deque: Deque<ChunkMessage>): Promise<void> {
         log.debug(`[onChunkMessage] chunk out of sync ${file.workspacePath} ${file.id}`);
 
+        const messages: ChunkMessage[] = [];
         while (!deque.isEmpty()) {
-            const cm = deque.removeFront();
-            for (const chunk of cm.chunks) {
-                const inverse = invertDiff(chunk);
+            messages.push(deque.removeFront());
+        }
+
+        for (let i = messages.length - 1; i >= 0; i--) {
+            const cm = messages[i];
+            const appliedChunks: DiffChunk[] = [];
+
+            for (let j = cm.chunks.length - 1; j >= 0; j--) {
+                const chunk = cm.chunks[j];
+
+                let inverse = invertDiff(chunk);
+
+                for (const appliedChunk of appliedChunks) {
+                    inverse = transform(appliedChunk, inverse);
+                }
+
                 await this.storage.persistChunk(file.workspacePath, inverse);
+
+                appliedChunks.unshift(inverse);
             }
         }
     }
@@ -564,7 +580,6 @@ export class Syncinator {
                 this.wsClient.sendMessage(msg);
             }
         } finally {
-            // Always clean up and resolve the promise
             // biome-ignore lint/style/noNonNullAssertion: <explanation>
             resolveModification!();
             this.pendingModifications.delete(cachedFile.id);
