@@ -1,6 +1,6 @@
 import assert from "node:assert";
 import { describe, test } from "node:test";
-import { Operation, applyDiff, computeDiff, invertDiff as inverseDiff } from "../diff/diff";
+import { Operation, applyDiff, computeDiff, invertDiff } from "../diff/diff";
 import type { DiffChunk } from "../diff/diff";
 
 describe("compute diff should be compliant with server implemenation", () => {
@@ -156,7 +156,7 @@ describe("inverseDiff", () => {
 
             assert.equal(diffs.length, 1);
 
-            const invert = inverseDiff(diffs[0]);
+            const invert = invertDiff(diffs[0]);
             assert.deepEqual(invert, expected);
 
             resultText = applyDiff(resultText, invert);
