@@ -25,7 +25,7 @@ export declare interface Snapshot {
     version: number;
     diskPath: string;
     hash: string;
-    createdAt: number;
+    createdAt: string;
     type: "file";
     workspaceId: number;
     mimeType: string;
@@ -126,7 +126,7 @@ export class ApiClient {
         return res.data ?? [];
     }
 
-    async fetchSnapshot(fileId: number, version: number): Promise<Snapshot> {
+    async fetchSnapshot(fileId: number, version: number): Promise<SnapshotWithContent> {
         const res = await this.client.get<ArrayBuffer>(
             `/v1/api/file/${fileId}/snapshot/${version}`,
         );

@@ -12,6 +12,8 @@ import { shallowEqualStrict } from "./utils/comparison";
 import { generateSHA256Hash } from "./utils/crypto";
 import { isTextMime } from "./utils/mime";
 import { sleep } from "./utils/sleep";
+import type { EventBus } from "./utils/eventBus";
+import type { Snapshot, SnapshotEventMap } from "./views/snapshots";
 
 export interface Events {
     create(file: TAbstractFile): Promise<void>;
@@ -27,6 +29,7 @@ export interface Options {
 
 interface Modals {
     diffModal(filename: string, local: FileDiff, remote: FileDiff): Promise<string>;
+    snapshotEventBus: EventBus<SnapshotEventMap>;
 }
 
 export class Syncinator {
@@ -65,6 +68,9 @@ export class Syncinator {
 
         this.modals = modals;
         this.options = opts;
+
+        this.modals.snapshotEventBus.on("file-focus-change", this.snapshotFileChanged.bind(this));
+        this.modals.snapshotEventBus.on("snapshot-selected", this.snapshotSelected.bind(this));
     }
 
     async init() {
@@ -698,6 +704,84 @@ export class Syncinator {
                 }
                 await sleep(100);
             }
+        }
+    }
+    // ---------- END ---------
+
+    // ---------- Snapshot events ---------
+    async snapshotFileChanged(data: { path: string }) {
+        log.debug("[snapshot]: file-changed", data);
+        const cachedFile = this.fileCache.getByPath(data.path);
+        if (cachedFile == null) {
+            log.error(`file '${data.path}' not found`);
+            return;
+        }
+
+        try {
+            const snapshot = await this.apiClient.fetchSnapshots(cachedFile.id);
+            this.modals.snapshotEventBus.emit(
+                "snapshots-list-updated",
+                snapshot.map((snapshot) => {
+                    return {
+                        path: snapshot.workspacePath,
+                        version: snapshot.version,
+                        fileId: snapshot.fileId,
+                        createdAt: snapshot.createdAt,
+                    };
+                }),
+            );
+        } catch (error) {
+            log.error(error);
+        }
+    }
+
+    async snapshotSelected(snapshot: Snapshot) {
+        log.debug("[snapshot]: snapshot-selected", snapshot);
+        const cachedFile = this.fileCache.getById(snapshot.fileId);
+        if (cachedFile == null) {
+            log.error(`file '${snapshot.fileId}' not found`);
+            return;
+        }
+
+        try {
+            const snapshotWithContent = await this.apiClient.fetchSnapshot(
+                snapshot.fileId,
+                snapshot.version,
+            );
+
+            const mergedContent = await this.modals.diffModal(
+                cachedFile.workspacePath,
+                {
+                    content: cachedFile.content as string,
+                    lastUpdate: new Date(cachedFile.updatedAt),
+                },
+                {
+                    content: snapshotWithContent.content as string,
+                    lastUpdate: new Date(snapshotWithContent.createdAt),
+                },
+            );
+
+            const chunks = computeDiff(cachedFile.content as string, mergedContent);
+
+            cachedFile.content = mergedContent;
+            this.fileCache.setById(cachedFile.id, cachedFile);
+
+            await this.storage.write(cachedFile.workspacePath, mergedContent, {
+                force: true,
+            });
+
+            if (chunks.length > 0) {
+                const msg: ChunkMessage = {
+                    type: MessageType.Chunk,
+                    fileId: cachedFile.id,
+                    chunks,
+                    version: cachedFile.version,
+                };
+                this.messageQueueRegistry.getDeque(cachedFile.id).addBack(msg);
+                this.wsClient.sendMessage(msg);
+            }
+        } catch (error) {
+            log.error(error);
         }
     }
     // ---------- END ---------

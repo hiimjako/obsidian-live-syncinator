@@ -8,10 +8,13 @@ import { base64ToArrayBuffer } from "./utils/base64Utils";
 import { ApiClient, type WorkspaceCredentials } from "./api/api";
 import { HttpClient } from "./api/http";
 import { type ChunkMessage, type EventMessage, MessageType, WsClient } from "./api/ws";
-import { applyDiffs, computeDiff } from "./diff/diff";
+import { computeDiff } from "./diff/diff";
 import { Syncinator } from "./plugin";
 import { Disk } from "./storage/storage";
 import { CreateVaultMock } from "./storage/storage.mock";
+import { EventBus } from "./utils/eventBus";
+import type { Snapshot, SnapshotEventMap } from "./views/snapshots";
+import { version } from "node:os";
 const sleep = promisify(setTimeout);
 
 async function assertEventually(assertion: () => Promise<void>, timeout = 5000, interval = 100) {
@@ -26,7 +29,6 @@ async function assertEventually(assertion: () => Promise<void>, timeout = 5000, 
         }
     }
 
-    // One final try before failing
     await assertion();
 }
 
@@ -54,6 +56,7 @@ describe("Plugin integration tests", () => {
     let apiClient: ApiClient;
     let syncinator: Syncinator;
     let wsClient: WsClient;
+    let snapshotEventBus: EventBus<SnapshotEventMap>;
 
     beforeEach(async () => {
         vaultRootDir = await fs.mkdtemp("/tmp/storage_test");
@@ -73,6 +76,8 @@ describe("Plugin integration tests", () => {
         apiClient.setAuthorizationHeader(token.token);
         wsClient.setAuthorization(token.token);
 
+        snapshotEventBus = new EventBus<SnapshotEventMap>();
+
         syncinator = new Syncinator(
             storage,
             apiClient,
@@ -81,6 +86,7 @@ describe("Plugin integration tests", () => {
                 diffModal: async () => {
                     return "";
                 },
+                snapshotEventBus,
             },
             {
                 conflictResolution: "remote",
@@ -825,6 +831,90 @@ describe("Plugin integration tests", () => {
             ]);
         });
     });
+
+    describe("snapshots events", () => {
+        test("should load snapshots on event", async () => {
+            const filepath = "files/file.md";
+            const content = "lorem ipsum";
+            await storage.write(filepath, content);
+            await syncinator.init();
+
+            const files = await apiClient.fetchFiles();
+            assert.equal(files.length, 1);
+
+            let actual: Snapshot[] | undefined;
+            snapshotEventBus.emit("file-focus-change", { path: filepath });
+            const p = new Promise<void>((resolve) => {
+                snapshotEventBus.on("snapshots-list-updated", async (snapshots) => {
+                    actual = snapshots;
+                    resolve();
+                });
+            });
+
+            await Promise.race([p, sleep(1_000)]);
+            assert.deepEqual(actual, []);
+        });
+
+        test("should update content on snapshot select", async (t) => {
+            const filepath = "files/file.md";
+            const content = "lorem ipsum";
+            const mergedContent = "lorem ipsum2";
+
+            const file = await apiClient.createFile(filepath, "");
+            await syncinator.init();
+
+            // triggering write to create snapshot
+            await storage.write(filepath, content, { force: true });
+            await syncinator.events.modify({
+                path: filepath,
+                vault: vault,
+                parent: null,
+                name: "file.md",
+            });
+
+            const files = await apiClient.fetchFiles();
+            assert.equal(files.length, 1);
+
+            await sleep(1_000);
+
+            const sendMessage = t.mock.method(wsClient, "sendMessage", () => {});
+            const diffModal = t.mock.method(syncinator.modals, "diffModal", () => {
+                return mergedContent;
+            });
+
+            snapshotEventBus.emit("snapshot-selected", {
+                fileId: file.id,
+                version: file.version + 1,
+                createdAt: file.createdAt,
+            });
+
+            await sleep(1_000);
+
+            assert.deepEqual(syncinator.cacheDump(), [
+                { ...file, content: mergedContent, version: 1 },
+            ]);
+
+            // checking local vault
+            const fileContent = await storage.readText(filepath);
+            assert.equal(fileContent, mergedContent);
+
+            assert.equal(diffModal.mock.callCount(), 1);
+            assert.equal(sendMessage.mock.callCount(), 1);
+            assert.deepEqual(sendMessage.mock.calls[0].arguments[0], {
+                type: MessageType.Chunk,
+                chunks: [
+                    {
+                        len: 1,
+                        position: 11,
+                        text: "2",
+                        type: 1,
+                    },
+                ],
+                version: file.version + 1,
+                fileId: file.id,
+            } as ChunkMessage);
+        });
+    });
 });
 
 describe("concurrent modifications", () => {
@@ -882,6 +972,7 @@ describe("concurrent modifications", () => {
                 diffModal: async () => {
                     return "";
                 },
+                snapshotEventBus: new EventBus<SnapshotEventMap>(),
             },
             {
                 conflictResolution: "remote",
@@ -896,6 +987,7 @@ describe("concurrent modifications", () => {
                 diffModal: async () => {
                     return "";
                 },
+                snapshotEventBus: new EventBus<SnapshotEventMap>(),
             },
             {
                 conflictResolution: "remote",
