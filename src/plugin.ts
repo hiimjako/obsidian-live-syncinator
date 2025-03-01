@@ -204,16 +204,7 @@ export class Syncinator {
                             });
 
                             const chunks = computeDiff(remoteFile.content, mergedContent);
-                            if (chunks.length > 0) {
-                                const msg: ChunkMessage = {
-                                    type: MessageType.Chunk,
-                                    fileId: file.id,
-                                    chunks,
-                                    version: file.version,
-                                };
-                                this.messageQueueRegistry.getDeque(file.id).addBack(msg);
-                                this.wsClient.sendMessage(msg);
-                            }
+                            this.sendChunks(file.id, file.version, chunks);
                             break;
                         }
                         case "local": {
@@ -230,13 +221,7 @@ export class Syncinator {
                             fileToCache.updatedAt = new Date(localStat?.mtime ?? "").toISOString();
                             this.fileCache.create(fileToCache);
 
-                            const msg: ChunkMessage = {
-                                type: MessageType.Chunk,
-                                fileId: file.id,
-                                chunks,
-                                version: file.version,
-                            };
-                            this.wsClient.sendMessage(msg);
+                            this.sendChunks(file.id, file.version, chunks);
                             break;
                         }
                         case "remote": {
@@ -562,22 +547,8 @@ export class Syncinator {
 
             // the cache content is not updated because we are still on older version
             // it is updated only on ack.
-            if (chunks.length > 0) {
-                log.debug("modify", {
-                    fileId: cachedFile.id,
-                    chunks,
-                    newContent,
-                });
-
-                const msg: ChunkMessage = {
-                    type: MessageType.Chunk,
-                    fileId: cachedFile.id,
-                    chunks,
-                    version: cachedFile.version,
-                };
-                this.messageQueueRegistry.getDeque(cachedFile.id).addBack(msg);
-                this.wsClient.sendMessage(msg);
-            }
+            log.debug("modify", { fileId: cachedFile.id, chunks, newContent });
+            this.sendChunks(cachedFile.id, cachedFile.version, chunks);
         } finally {
             // biome-ignore lint/style/noNonNullAssertion: <explanation>
             resolveModification!();
@@ -770,21 +741,25 @@ export class Syncinator {
                 force: true,
             });
 
-            if (chunks.length > 0) {
-                const msg: ChunkMessage = {
-                    type: MessageType.Chunk,
-                    fileId: cachedFile.id,
-                    chunks,
-                    version: cachedFile.version,
-                };
-                this.messageQueueRegistry.getDeque(cachedFile.id).addBack(msg);
-                this.wsClient.sendMessage(msg);
-            }
+            this.sendChunks(cachedFile.id, cachedFile.version, chunks);
         } catch (error) {
             log.error(error);
         }
     }
     // ---------- END ---------
+
+    sendChunks(fileId: number, version: number, chunks: DiffChunk[]) {
+        if (chunks.length > 0) {
+            const msg: ChunkMessage = {
+                type: MessageType.Chunk,
+                fileId,
+                chunks,
+                version,
+            };
+            this.messageQueueRegistry.getDeque(fileId).addBack(msg);
+            this.wsClient.sendMessage(msg);
+        }
+    }
 
     cacheDump() {
         return this.fileCache.dump().sort((a, b) => a.id - b.id);
