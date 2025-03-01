@@ -47,3 +47,20 @@ export type ObsidianEventMap = {
     delete: { file: TAbstractFile };
     rename: { file: TAbstractFile; oldPath: string };
 };
+
+export interface CursorPosition {
+    path: string;
+    label: string;
+    color: `#${string}`;
+    left: number;
+    bottom: number;
+}
+
+export interface CursorPositionWithId extends CursorPosition {
+    id: string;
+}
+
+export type CursorEventMap = {
+    "remote-curosr-update": CursorPositionWithId;
+    "local-cursor-update": CursorPosition;
+};
