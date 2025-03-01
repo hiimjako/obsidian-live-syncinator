@@ -1,6 +1,6 @@
 import { log } from "src/logger/logger";
-import { sleep } from "../utils/sleep";
 import type { DiffChunk } from "../diff/diff";
+import { sleep } from "../utils/sleep";
 
 export enum MessageType {
     Chunk = 0,

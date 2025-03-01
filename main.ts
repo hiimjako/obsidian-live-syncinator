@@ -3,12 +3,12 @@ import { log } from "src/logger/logger";
 import { DiffModal, type FileDiff } from "src/modals/conflict";
 import { Syncinator as SyncinatorPlugin } from "src/plugin";
 import { Disk } from "src/storage/storage";
+import { EventBus } from "src/utils/eventBus";
+import { type SnapshotEventMap, SnapshotView, VIEW_TYPE_SNAPSHOT } from "src/views/snapshots";
 import { ApiClient } from "./src/api/api";
 import { HttpClient } from "./src/api/http";
 import { WsClient } from "./src/api/ws";
 import { DEFAULT_SETTINGS, type PluginSettings, SettingTab } from "./src/settings";
-import { EventBus } from "src/utils/eventBus";
-import { SnapshotView, VIEW_TYPE_SNAPSHOT, type SnapshotEventMap } from "src/views/snapshots";
 
 export default class Syncinator extends Plugin {
     settings: PluginSettings = DEFAULT_SETTINGS;

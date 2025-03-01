@@ -26,3 +26,15 @@ export class EventBus<EventTypes extends Record<string, unknown>> {
         await Promise.all(this.events[event].map((callback) => callback(data)));
     }
 }
+
+export interface Snapshot {
+    fileId: number;
+    version: number;
+    createdAt: string;
+}
+
+export type SnapshotEventMap = {
+    "file-focus-change": { path: string };
+    "snapshots-list-updated": Snapshot[];
+    "snapshot-selected": Snapshot;
+};

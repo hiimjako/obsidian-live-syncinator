@@ -4,7 +4,6 @@ import fs from "node:fs/promises";
 import { afterEach, beforeEach, describe, mock, test } from "node:test";
 import { promisify } from "node:util";
 import type { Vault } from "obsidian";
-import { base64ToArrayBuffer } from "./utils/base64Utils";
 import { ApiClient, type WorkspaceCredentials } from "./api/api";
 import { HttpClient } from "./api/http";
 import { type ChunkMessage, type EventMessage, MessageType, WsClient } from "./api/ws";
@@ -12,9 +11,9 @@ import { computeDiff } from "./diff/diff";
 import { Syncinator } from "./plugin";
 import { Disk } from "./storage/storage";
 import { CreateVaultMock } from "./storage/storage.mock";
+import { base64ToArrayBuffer } from "./utils/base64Utils";
 import { EventBus } from "./utils/eventBus";
 import type { Snapshot, SnapshotEventMap } from "./views/snapshots";
-import { version } from "node:os";
 const sleep = promisify(setTimeout);
 
 async function assertEventually(assertion: () => Promise<void>, timeout = 5000, interval = 100) {

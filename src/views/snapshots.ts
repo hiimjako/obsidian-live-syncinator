@@ -1,18 +1,6 @@
 import { ItemView } from "obsidian";
 import type { IconName, TFile, WorkspaceLeaf } from "obsidian";
-import type { EventBus } from "../utils/eventBus";
-
-export interface Snapshot {
-    fileId: number;
-    version: number;
-    createdAt: string;
-}
-
-export type SnapshotEventMap = {
-    "file-focus-change": { path: string };
-    "snapshots-list-updated": Snapshot[];
-    "snapshot-selected": Snapshot;
-};
+import type { EventBus, Snapshot, SnapshotEventMap } from "../utils/eventBus";
 
 export const VIEW_TYPE_SNAPSHOT = "syncinator-snapshot-view";
 

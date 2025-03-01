@@ -10,10 +10,9 @@ import type { FileDiff } from "./modals/conflict";
 import type { Disk } from "./storage/storage";
 import { shallowEqualStrict } from "./utils/comparison";
 import { generateSHA256Hash } from "./utils/crypto";
+import type { EventBus, Snapshot, SnapshotEventMap } from "./utils/eventBus";
 import { isTextMime } from "./utils/mime";
 import { sleep } from "./utils/sleep";
-import type { EventBus } from "./utils/eventBus";
-import type { Snapshot, SnapshotEventMap } from "./views/snapshots";
 
 export interface Events {
     create(file: TAbstractFile): Promise<void>;
