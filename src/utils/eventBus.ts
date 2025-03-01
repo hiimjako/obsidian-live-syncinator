@@ -1,3 +1,5 @@
+import type { TAbstractFile } from "obsidian";
+
 export class EventBus<EventTypes extends Record<string, unknown>> {
     private events: {
         [E in keyof EventTypes]?: Array<(data: EventTypes[E]) => Promise<void>>;
@@ -37,4 +39,11 @@ export type SnapshotEventMap = {
     "file-focus-change": { path: string };
     "snapshots-list-updated": Snapshot[];
     "snapshot-selected": Snapshot;
+};
+
+export type ObsidianEventMap = {
+    create: { file: TAbstractFile };
+    modify: { file: TAbstractFile };
+    delete: { file: TAbstractFile };
+    rename: { file: TAbstractFile; oldPath: string };
 };

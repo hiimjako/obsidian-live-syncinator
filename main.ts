@@ -3,8 +3,8 @@ import { log } from "src/logger/logger";
 import { DiffModal, type FileDiff } from "src/modals/conflict";
 import { Syncinator as SyncinatorPlugin } from "src/plugin";
 import { Disk } from "src/storage/storage";
-import { EventBus } from "src/utils/eventBus";
-import { type SnapshotEventMap, SnapshotView, VIEW_TYPE_SNAPSHOT } from "src/views/snapshots";
+import { EventBus, type ObsidianEventMap, type SnapshotEventMap } from "src/utils/eventBus";
+import { SnapshotView, VIEW_TYPE_SNAPSHOT } from "src/views/snapshots";
 import { ApiClient } from "./src/api/api";
 import { HttpClient } from "./src/api/http";
 import { WsClient } from "./src/api/ws";
@@ -16,14 +16,16 @@ export default class Syncinator extends Plugin {
     private storage: Disk;
     private apiClient: ApiClient;
 
-    async registerPlugin(eventBus: EventBus<SnapshotEventMap>) {
+    async registerPlugin(snapshotEventBus: EventBus<SnapshotEventMap>) {
+        const obsidianEventBus = new EventBus<ObsidianEventMap>();
         const plugin = new SyncinatorPlugin(
             this.storage,
             this.apiClient,
             this.wsClient,
             {
                 diffModal: this.wrappedDiffModal.bind(this),
-                snapshotEventBus: eventBus,
+                snapshotEventBus,
+                obsidianEventBus,
             },
             {
                 conflictResolution: this.settings.conflictResolution,
@@ -32,10 +34,28 @@ export default class Syncinator extends Plugin {
 
         await plugin.init();
 
-        this.registerEvent(this.app.vault.on("create", plugin.events.create));
-        this.registerEvent(this.app.vault.on("modify", plugin.events.modify));
-        this.registerEvent(this.app.vault.on("delete", plugin.events.delete));
-        this.registerEvent(this.app.vault.on("rename", plugin.events.rename));
+        this.registerEvent(
+            this.app.vault.on("create", (file) => {
+                obsidianEventBus.emit("create", { file });
+            }),
+        );
+        this.registerEvent(
+            this.app.vault.on("modify", (file) => {
+                obsidianEventBus.emit("modify", { file });
+            }),
+        );
+
+        this.registerEvent(
+            this.app.vault.on("delete", (file) => {
+                obsidianEventBus.emit("delete", { file });
+            }),
+        );
+
+        this.registerEvent(
+            this.app.vault.on("rename", (file, oldPath) => {
+                obsidianEventBus.emit("rename", { file, oldPath });
+            }),
+        );
     }
 
     private async refreshToken() {

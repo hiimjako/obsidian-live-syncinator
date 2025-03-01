@@ -12,8 +12,12 @@ import { Syncinator } from "./plugin";
 import { Disk } from "./storage/storage";
 import { CreateVaultMock } from "./storage/storage.mock";
 import { base64ToArrayBuffer } from "./utils/base64Utils";
-import { EventBus } from "./utils/eventBus";
-import type { Snapshot, SnapshotEventMap } from "./views/snapshots";
+import {
+    EventBus,
+    type ObsidianEventMap,
+    type Snapshot,
+    type SnapshotEventMap,
+} from "./utils/eventBus";
 const sleep = promisify(setTimeout);
 
 async function assertEventually(assertion: () => Promise<void>, timeout = 5000, interval = 100) {
@@ -56,6 +60,7 @@ describe("Plugin integration tests", () => {
     let syncinator: Syncinator;
     let wsClient: WsClient;
     let snapshotEventBus: EventBus<SnapshotEventMap>;
+    let obsidianEventBus: EventBus<ObsidianEventMap>;
 
     beforeEach(async () => {
         vaultRootDir = await fs.mkdtemp("/tmp/storage_test");
@@ -76,6 +81,7 @@ describe("Plugin integration tests", () => {
         wsClient.setAuthorization(token.token);
 
         snapshotEventBus = new EventBus<SnapshotEventMap>();
+        obsidianEventBus = new EventBus<ObsidianEventMap>();
 
         syncinator = new Syncinator(
             storage,
@@ -86,6 +92,7 @@ describe("Plugin integration tests", () => {
                     return "";
                 },
                 snapshotEventBus,
+                obsidianEventBus,
             },
             {
                 conflictResolution: "remote",
@@ -221,7 +228,7 @@ describe("Plugin integration tests", () => {
             await storage.write(filepath, localContent);
 
             const sendMessage = t.mock.method(wsClient, "sendMessage", () => {});
-            const diffModal = t.mock.method(syncinator.modals, "diffModal", () => {
+            const diffModal = t.mock.method(syncinator.contracts, "diffModal", () => {
                 return mergedContent;
             });
 
@@ -265,12 +272,16 @@ describe("Plugin integration tests", () => {
 
             // the file will exists before the event
             await storage.write(filepath, content);
-            await syncinator.events.create({
-                name: filename,
-                path: filepath,
-                vault,
-                parent: null,
+            await obsidianEventBus.emit("create", {
+                file: {
+                    name: filename,
+                    path: filepath,
+                    vault,
+                    parent: null,
+                },
             });
+
+            await sleep(500);
 
             // checking cache
             const files = await apiClient.fetchFiles();
@@ -294,11 +305,13 @@ describe("Plugin integration tests", () => {
 
             // the file will exists before the event
             await storage.write(filepath, "", { isDir: true });
-            await syncinator.events.create({
-                name: filepath,
-                path: filepath,
-                vault,
-                parent: null,
+            await obsidianEventBus.emit("create", {
+                file: {
+                    name: filepath,
+                    path: filepath,
+                    vault,
+                    parent: null,
+                },
             });
 
             // checking cache
@@ -330,11 +343,13 @@ describe("Plugin integration tests", () => {
             // loading cache
             await syncinator.init();
 
-            await syncinator.events.delete({
-                name: filename,
-                path: filepath,
-                vault,
-                parent: null,
+            await obsidianEventBus.emit("delete", {
+                file: {
+                    name: filename,
+                    path: filepath,
+                    vault,
+                    parent: null,
+                },
             });
 
             // checking cache
@@ -383,11 +398,13 @@ describe("Plugin integration tests", () => {
             // loading cache
             await syncinator.init();
 
-            await syncinator.events.delete({
-                name: "folderToDelete",
-                path: "folderToDelete",
-                vault,
-                parent: null,
+            await obsidianEventBus.emit("delete", {
+                file: {
+                    name: "folderToDelete",
+                    path: "folderToDelete",
+                    vault,
+                    parent: null,
+                },
             });
 
             // checking cache
@@ -450,15 +467,15 @@ describe("Plugin integration tests", () => {
             // to check updatedAt
             await sleep(1000);
 
-            await syncinator.events.rename(
-                {
+            await obsidianEventBus.emit("rename", {
+                file: {
                     name: newFilename,
                     path: newFilepath,
                     vault,
                     parent: null,
                 },
-                oldFilepath,
-            );
+                oldPath: oldFilepath,
+            });
 
             // checking cache
             const file = await apiClient.fetchFile(filesPreInit[0].id);
@@ -512,15 +529,15 @@ describe("Plugin integration tests", () => {
             // loading cache
             await syncinator.init();
 
-            await syncinator.events.rename(
-                {
+            await obsidianEventBus.emit("rename", {
+                file: {
                     name: "renamedFolder",
                     path: "renamedFolder",
                     vault,
                     parent: null,
                 },
-                "folderToRename",
-            );
+                oldPath: "folderToRename",
+            });
 
             // checking cache
             const files = await apiClient.fetchFiles();
@@ -592,11 +609,13 @@ describe("Plugin integration tests", () => {
             assert.deepEqual(syncinator.cacheDump(), [{ ...files[0], content: content }]);
 
             await storage.write(filepath, newContent, { force: true });
-            await syncinator.events.modify({
-                path: filepath,
-                vault: vault,
-                parent: null,
-                name: "file.md",
+            await obsidianEventBus.emit("modify", {
+                file: {
+                    path: filepath,
+                    vault: vault,
+                    parent: null,
+                    name: "file.md",
+                },
             });
 
             await sleep(500);
@@ -864,11 +883,13 @@ describe("Plugin integration tests", () => {
 
             // triggering write to create snapshot
             await storage.write(filepath, content, { force: true });
-            await syncinator.events.modify({
-                path: filepath,
-                vault: vault,
-                parent: null,
-                name: "file.md",
+            await obsidianEventBus.emit("modify", {
+                file: {
+                    path: filepath,
+                    vault: vault,
+                    parent: null,
+                    name: "file.md",
+                },
             });
 
             const files = await apiClient.fetchFiles();
@@ -877,7 +898,7 @@ describe("Plugin integration tests", () => {
             await sleep(1_000);
 
             const sendMessage = t.mock.method(wsClient, "sendMessage", () => {});
-            const diffModal = t.mock.method(syncinator.modals, "diffModal", () => {
+            const diffModal = t.mock.method(syncinator.contracts, "diffModal", () => {
                 return mergedContent;
             });
 
@@ -935,6 +956,9 @@ describe("concurrent modifications", () => {
     let syncinator1: Syncinator;
     let syncinator2: Syncinator;
 
+    let obsidianEventBus1: EventBus<ObsidianEventMap>;
+    let obsidianEventBus2: EventBus<ObsidianEventMap>;
+
     beforeEach(async () => {
         vaultRootDir1 = await fs.mkdtemp("/tmp/storage_test_1");
         vault1 = CreateVaultMock(vaultRootDir1);
@@ -958,6 +982,9 @@ describe("concurrent modifications", () => {
             maxReconnectAttempts: 0,
         });
 
+        obsidianEventBus1 = new EventBus<ObsidianEventMap>();
+        obsidianEventBus2 = new EventBus<ObsidianEventMap>();
+
         apiClient1.setAuthorizationHeader(token.token);
         apiClient2.setAuthorizationHeader(token.token);
         wsClient1.setAuthorization(token.token);
@@ -972,6 +999,7 @@ describe("concurrent modifications", () => {
                     return "";
                 },
                 snapshotEventBus: new EventBus<SnapshotEventMap>(),
+                obsidianEventBus: obsidianEventBus1,
             },
             {
                 conflictResolution: "remote",
@@ -987,6 +1015,7 @@ describe("concurrent modifications", () => {
                     return "";
                 },
                 snapshotEventBus: new EventBus<SnapshotEventMap>(),
+                obsidianEventBus: obsidianEventBus2,
             },
             {
                 conflictResolution: "remote",
@@ -1027,17 +1056,21 @@ describe("concurrent modifications", () => {
         // Client starts modifying
         // Server sends a modification before client's change is acknowledged
         await Promise.all([
-            syncinator1.events.modify({
-                path: filepath,
-                vault: vault1,
-                parent: null,
-                name: "concurrent.md",
+            obsidianEventBus1.emit("modify", {
+                file: {
+                    path: filepath,
+                    vault: vault1,
+                    parent: null,
+                    name: "concurrent.md",
+                },
             }),
-            syncinator2.events.modify({
-                path: filepath,
-                vault: vault2,
-                parent: null,
-                name: "concurrent.md",
+            obsidianEventBus2.emit("modify", {
+                file: {
+                    path: filepath,
+                    vault: vault2,
+                    parent: null,
+                    name: "concurrent.md",
+                },
             }),
         ]);
 
@@ -1082,11 +1115,13 @@ describe("concurrent modifications", () => {
         for (let i = 1; i <= numberOfModifications; i++) {
             const modificationContent = `modification ${i} from syncinator`;
             await storage1.write(filepath, modificationContent, { force: true });
-            await syncinator1.events.modify({
-                path: filepath,
-                vault: vault1,
-                parent: null,
-                name: "concurrent.md",
+            await obsidianEventBus1.emit("modify", {
+                file: {
+                    path: filepath,
+                    vault: vault1,
+                    parent: null,
+                    name: "concurrent.md",
+                },
             });
             await sleep(50);
         }
@@ -1136,25 +1171,27 @@ describe("concurrent modifications", () => {
         const performModification = async (
             storage: Disk,
             vault: Vault,
-            syncinator: Syncinator,
+            eventBus: EventBus<ObsidianEventMap>,
             modificationNumber: number,
         ) => {
-            const modificationContent = `modification ${modificationNumber} from syncinator ${syncinator === syncinator1 ? "1" : "2"}`;
+            const modificationContent = `modification ${modificationNumber} from syncinator}`;
             const oldContent = await storage.readText(filepath);
             const chunks = computeDiff(oldContent, modificationContent);
             await storage.persistChunks(filepath, chunks);
-            await syncinator.events.modify({
-                path: filepath,
-                vault: vault,
-                parent: null,
-                name: "concurrent.md",
+            await eventBus.emit("modify", {
+                file: {
+                    path: filepath,
+                    vault: vault,
+                    parent: null,
+                    name: "concurrent.md",
+                },
             });
             await sleep(50);
         };
 
         for (let i = 1; i <= numberOfModifications; i++) {
-            await performModification(storage1, vault1, syncinator1, i);
-            await performModification(storage2, vault2, syncinator2, i);
+            await performModification(storage1, vault1, obsidianEventBus1, i);
+            await performModification(storage2, vault2, obsidianEventBus2, i);
         }
 
         await sleep(2_000);

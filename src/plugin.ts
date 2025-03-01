@@ -10,25 +10,19 @@ import type { FileDiff } from "./modals/conflict";
 import type { Disk } from "./storage/storage";
 import { shallowEqualStrict } from "./utils/comparison";
 import { generateSHA256Hash } from "./utils/crypto";
-import type { EventBus, Snapshot, SnapshotEventMap } from "./utils/eventBus";
+import type { EventBus, ObsidianEventMap, Snapshot, SnapshotEventMap } from "./utils/eventBus";
 import { isTextMime } from "./utils/mime";
 import { sleep } from "./utils/sleep";
-
-export interface Events {
-    create(file: TAbstractFile): Promise<void>;
-    modify(file: TAbstractFile): Promise<void>;
-    delete(file: TAbstractFile): Promise<void>;
-    rename(file: TAbstractFile, oldPath: string): Promise<void>;
-}
 
 export type ConflictResolution = "remote" | "local" | "merge";
 export interface Options {
     conflictResolution: ConflictResolution;
 }
 
-interface Modals {
+interface Contracts {
     diffModal(filename: string, local: FileDiff, remote: FileDiff): Promise<string>;
     snapshotEventBus: EventBus<SnapshotEventMap>;
+    obsidianEventBus: EventBus<ObsidianEventMap>;
 }
 
 export class Syncinator {
@@ -38,16 +32,14 @@ export class Syncinator {
     private wsClient: WsClient;
     private messageQueueRegistry = new DequeRegistry<number, ChunkMessage>();
     options: Options = { conflictResolution: "remote" };
-    modals: Modals;
+    contracts: Contracts;
     private pendingModifications: Map<number, Promise<void>> = new Map();
-
-    events: Events;
 
     constructor(
         storage: Disk,
         apiClient: ApiClient,
         wsClient: WsClient,
-        modals: Modals,
+        modals: Contracts,
         opts: Options,
     ) {
         this.storage = storage;
@@ -58,18 +50,19 @@ export class Syncinator {
         this.wsClient.onEventMessage(this.handleEventMessage.bind(this));
         this.wsClient.connect();
 
-        this.events = {
-            create: this.create.bind(this),
-            delete: this.delete.bind(this),
-            modify: this.modify.bind(this),
-            rename: this.rename.bind(this),
-        };
-
-        this.modals = modals;
+        this.contracts = modals;
         this.options = opts;
 
-        this.modals.snapshotEventBus.on("file-focus-change", this.snapshotFileChanged.bind(this));
-        this.modals.snapshotEventBus.on("snapshot-selected", this.snapshotSelected.bind(this));
+        this.contracts.obsidianEventBus.on("create", this.create.bind(this));
+        this.contracts.obsidianEventBus.on("delete", this.delete.bind(this));
+        this.contracts.obsidianEventBus.on("modify", this.modify.bind(this));
+        this.contracts.obsidianEventBus.on("rename", this.rename.bind(this));
+
+        this.contracts.snapshotEventBus.on(
+            "file-focus-change",
+            this.snapshotFileChanged.bind(this),
+        );
+        this.contracts.snapshotEventBus.on("snapshot-selected", this.snapshotSelected.bind(this));
     }
 
     async init() {
@@ -183,7 +176,7 @@ export class Syncinator {
                             log.debug(
                                 `handling conflict on file "${file.workspacePath}", using merge tool`,
                             );
-                            const mergedContent = await this.modals.diffModal(
+                            const mergedContent = await this.contracts.diffModal(
                                 file.workspacePath,
                                 {
                                     content: localTextContent,
@@ -485,7 +478,7 @@ export class Syncinator {
     // ---------- END ---------
 
     // ---------- Obsidian events ---------
-    private async create(file: TAbstractFile) {
+    private async create({ file }: { file: TAbstractFile }) {
         log.debug("[event]: create", file);
         if (this.fileCache.hasByPath(file.path)) {
             return;
@@ -520,7 +513,7 @@ export class Syncinator {
         }
     }
 
-    private async modify(file: TAbstractFile) {
+    private async modify({ file }: { file: TAbstractFile }) {
         log.debug("[event]: modify", file);
         const cachedFile = this.fileCache.getByPath(file.path);
         if (cachedFile == null) {
@@ -555,7 +548,7 @@ export class Syncinator {
         }
     }
 
-    private async delete(file: TAbstractFile) {
+    private async delete({ file }: { file: TAbstractFile }) {
         log.debug("[event]: delete", file);
 
         const deleteFile = async (fileId: number) => {
@@ -603,7 +596,7 @@ export class Syncinator {
         }
     }
 
-    private async rename(file: TAbstractFile, oldPath: string) {
+    private async rename({ file, oldPath }: { file: TAbstractFile; oldPath: string }) {
         log.debug("[event]: rename", oldPath, file);
         const fileToRename = this.fileCache.getByPath(oldPath);
         if (fileToRename) {
@@ -689,7 +682,7 @@ export class Syncinator {
 
         try {
             const snapshot = await this.apiClient.fetchSnapshots(cachedFile.id);
-            this.modals.snapshotEventBus.emit(
+            this.contracts.snapshotEventBus.emit(
                 "snapshots-list-updated",
                 snapshot.map((snapshot) => {
                     return {
@@ -719,7 +712,7 @@ export class Syncinator {
                 snapshot.version,
             );
 
-            const mergedContent = await this.modals.diffModal(
+            const mergedContent = await this.contracts.diffModal(
                 cachedFile.workspacePath,
                 {
                     content: cachedFile.content as string,
