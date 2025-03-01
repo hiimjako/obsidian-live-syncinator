@@ -20,6 +20,22 @@ export declare interface FileWithContent extends File {
     content: string | ArrayBuffer;
 }
 
+export declare interface Snapshot {
+    fileId: number;
+    version: number;
+    diskPath: string;
+    hash: string;
+    createdAt: number;
+    type: "file";
+    workspaceId: number;
+    mimeType: string;
+    workspacePath: string;
+}
+
+export declare interface SnapshotWithContent extends Snapshot {
+    content: string | ArrayBuffer;
+}
+
 export declare interface Operation {
     fileId: number;
     version: number;
@@ -93,6 +109,50 @@ export class ApiClient {
 
         // TODO: optimize this using streams
         const fileWithContent: FileWithContent = {
+            ...metadata,
+            content: filePart.value,
+        };
+
+        return fileWithContent;
+    }
+
+    async fetchSnapshots(fileId: number): Promise<Snapshot[]> {
+        const res = await this.client.get<Snapshot[]>(`/v1/api/file/${fileId}/snapshot`);
+
+        if (res.status !== StatusCodes.OK) {
+            throw new Error(`error while fetching files: ${res.data}`);
+        }
+
+        return res.data ?? [];
+    }
+
+    async fetchSnapshot(fileId: number, version: number): Promise<Snapshot> {
+        const res = await this.client.get<ArrayBuffer>(
+            `/v1/api/file/${fileId}/snapshot/${version}`,
+        );
+
+        if (res.status !== StatusCodes.OK) {
+            throw new Error(`error while fetching snapshot content ${res.data}`);
+        }
+
+        const contentType = res.headers.get("Content-Type");
+        if (!contentType || !contentType.startsWith("multipart/mixed")) {
+            throw new Error("Unexpected Content-Type, expected multipart/mixed");
+        }
+
+        const multipart = new Multipart().parseParts(contentType, res.data);
+        const filePart = multipart.files?.[0] ?? null;
+        const metadataPart = multipart.fileds.find((field) => field.name === "metadata");
+
+        if (!metadataPart || !filePart) {
+            throw new Error("Incomplete multipart response");
+        }
+
+        // Extract and parse the metadata
+        const metadata: Snapshot = JSON.parse(metadataPart.value);
+
+        // TODO: optimize this using streams
+        const fileWithContent: SnapshotWithContent = {
             ...metadata,
             content: filePart.value,
         };
