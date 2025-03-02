@@ -13,6 +13,7 @@ import { Disk } from "./storage/storage";
 import { CreateVaultMock } from "./storage/storage.mock";
 import { base64ToArrayBuffer } from "./utils/base64Utils";
 import {
+    type CursorEventMap,
     EventBus,
     type ObsidianEventMap,
     type Snapshot,
@@ -61,7 +62,7 @@ describe("Plugin integration tests", () => {
     let wsClient: WsClient;
     let snapshotEventBus: EventBus<SnapshotEventMap>;
     let obsidianEventBus: EventBus<ObsidianEventMap>;
-
+    let cursorEventBus: EventBus<CursorEventMap>;
     beforeEach(async () => {
         vaultRootDir = await fs.mkdtemp("/tmp/storage_test");
         vault = CreateVaultMock(vaultRootDir);
@@ -82,6 +83,7 @@ describe("Plugin integration tests", () => {
 
         snapshotEventBus = new EventBus<SnapshotEventMap>();
         obsidianEventBus = new EventBus<ObsidianEventMap>();
+        cursorEventBus = new EventBus<CursorEventMap>();
 
         syncinator = new Syncinator(
             storage,
@@ -93,6 +95,7 @@ describe("Plugin integration tests", () => {
                 },
                 snapshotEventBus,
                 obsidianEventBus,
+                cursorEventBus,
             },
             {
                 conflictResolution: "remote",
@@ -1000,6 +1003,7 @@ describe("concurrent modifications", () => {
                 },
                 snapshotEventBus: new EventBus<SnapshotEventMap>(),
                 obsidianEventBus: obsidianEventBus1,
+                cursorEventBus: new EventBus<CursorEventMap>(),
             },
             {
                 conflictResolution: "remote",
@@ -1016,6 +1020,7 @@ describe("concurrent modifications", () => {
                 },
                 snapshotEventBus: new EventBus<SnapshotEventMap>(),
                 obsidianEventBus: obsidianEventBus2,
+                cursorEventBus: new EventBus<CursorEventMap>(),
             },
             {
                 conflictResolution: "remote",

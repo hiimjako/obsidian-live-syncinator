@@ -14,7 +14,7 @@ export class CursorEnv {
     ) {
         this.inactivityTimeoutMs = inactivityTimeoutMs;
 
-        bus.on("remote-curosr-update", async (data) => {
+        bus.on("remote-cursor-update", async (data) => {
             const activeEditor = getActiveEditor();
             if (activeEditor === null) {
                 log.error("impossible retrive current active editor");

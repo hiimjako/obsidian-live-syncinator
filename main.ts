@@ -1,11 +1,12 @@
 import { type Editor, MarkdownView, Notice, Plugin } from "obsidian";
+import { CursorEnv } from "src/editor/cursor";
 import { log } from "src/logger/logger";
 import { DiffModal, type FileDiff } from "src/modals/conflict";
 import { Syncinator as SyncinatorPlugin } from "src/plugin";
 import { Disk } from "src/storage/storage";
 import {
-    EventBus,
     type CursorEventMap,
+    EventBus,
     type ObsidianEventMap,
     type SnapshotEventMap,
 } from "src/utils/eventBus";
@@ -14,7 +15,6 @@ import { ApiClient } from "./src/api/api";
 import { HttpClient } from "./src/api/http";
 import { WsClient } from "./src/api/ws";
 import { DEFAULT_SETTINGS, type PluginSettings, SettingTab } from "./src/settings";
-import { CursorEnv } from "src/editor/cursor";
 
 export default class Syncinator extends Plugin {
     settings: PluginSettings = DEFAULT_SETTINGS;
@@ -39,6 +39,7 @@ export default class Syncinator extends Plugin {
                 diffModal: this.wrappedDiffModal.bind(this),
                 snapshotEventBus: this.snapshotEventBus,
                 obsidianEventBus: this.obsidianEventBus,
+                cursorEventBus: this.cursorEventBus,
             },
             {
                 conflictResolution: this.settings.conflictResolution,

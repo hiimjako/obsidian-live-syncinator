@@ -2,7 +2,13 @@ import type { TAbstractFile } from "obsidian";
 import path from "path-browserify";
 import { log } from "src/logger/logger";
 import type { ApiClient, File, FileWithContent } from "./api/api";
-import { type ChunkMessage, type EventMessage, MessageType, type WsClient } from "./api/ws";
+import {
+    type ChunkMessage,
+    type CursorMessage,
+    type EventMessage,
+    MessageType,
+    type WsClient,
+} from "./api/ws";
 import { FileCache } from "./cache";
 import { type DiffChunk, applyDiffs, computeDiff, invertDiff, transform } from "./diff/diff";
 import { type Deque, DequeRegistry } from "./messageQueue";
@@ -10,7 +16,14 @@ import type { FileDiff } from "./modals/conflict";
 import type { Disk } from "./storage/storage";
 import { shallowEqualStrict } from "./utils/comparison";
 import { generateSHA256Hash } from "./utils/crypto";
-import type { EventBus, ObsidianEventMap, Snapshot, SnapshotEventMap } from "./utils/eventBus";
+import type {
+    CursorEventMap,
+    CursorPosition,
+    EventBus,
+    ObsidianEventMap,
+    Snapshot,
+    SnapshotEventMap,
+} from "./utils/eventBus";
 import { isTextMime } from "./utils/mime";
 import { sleep } from "./utils/sleep";
 
@@ -23,6 +36,7 @@ interface Contracts {
     diffModal(filename: string, local: FileDiff, remote: FileDiff): Promise<string>;
     snapshotEventBus: EventBus<SnapshotEventMap>;
     obsidianEventBus: EventBus<ObsidianEventMap>;
+    cursorEventBus: EventBus<CursorEventMap>;
 }
 
 export class Syncinator {
@@ -39,19 +53,20 @@ export class Syncinator {
         storage: Disk,
         apiClient: ApiClient,
         wsClient: WsClient,
-        modals: Contracts,
+        contracts: Contracts,
         opts: Options,
     ) {
         this.storage = storage;
         this.apiClient = apiClient;
         this.wsClient = wsClient;
+        this.contracts = contracts;
+        this.options = opts;
 
         this.wsClient.onChunkMessage(this.handleChunkMessage.bind(this));
         this.wsClient.onEventMessage(this.handleEventMessage.bind(this));
+        this.wsClient.onCursorMessage(this.handleCursorMessage.bind(this));
+        this.contracts.cursorEventBus.on("local-cursor-update", this.sendCursor.bind(this));
         this.wsClient.connect();
-
-        this.contracts = modals;
-        this.options = opts;
 
         this.contracts.obsidianEventBus.on("create", this.create.bind(this));
         this.contracts.obsidianEventBus.on("delete", this.delete.bind(this));
@@ -248,6 +263,7 @@ export class Syncinator {
 
     // ---------- ChunkMessage ---------
     async handleChunkMessage(data: ChunkMessage) {
+        log.debug("[socket]: chunk message", data);
         try {
             const { fileId, version } = data;
             const file = this.fileCache.getById(fileId);
@@ -460,7 +476,7 @@ export class Syncinator {
     }
 
     async handleEventMessage(event: EventMessage) {
-        log.debug("[socket]: message", event);
+        log.debug("[socket]: event message", event);
         switch (event.type) {
             case MessageType.Create:
                 await this.handleCreateEvent(event);
@@ -475,6 +491,37 @@ export class Syncinator {
                 log.error(`[socket] unknown event ${event}`);
         }
     }
+
+    async handleCursorMessage(cursor: CursorMessage) {
+        log.debug("[socket]: cursor message", cursor);
+        this.contracts.cursorEventBus.emit("remote-cursor-update", {
+            id: cursor.id ?? "",
+            ...cursor,
+        });
+    }
+
+    async sendCursor(cursor: CursorPosition) {
+        if (!this.fileCache.hasByPath(cursor.path)) {
+            return;
+        }
+
+        const cachedFile = this.fileCache.getByPath(cursor.path);
+        if (cachedFile == null) {
+            log.error(`file '${cursor.path}' not found`);
+            return;
+        }
+
+        this.wsClient.sendMessage({
+            type: MessageType.Cursor,
+            fileId: cachedFile.id,
+            path: cursor.path,
+            label: cursor.label,
+            color: cursor.color,
+            left: cursor.left,
+            bottom: cursor.bottom,
+        });
+    }
+
     // ---------- END ---------
 
     // ---------- Obsidian events ---------
