@@ -11,6 +11,8 @@ export interface PluginSettings {
     workspacePass: string;
     logLevel: LogLevelType;
     conflictResolution: ConflictResolution;
+    nickname: string;
+    color: `#${string}`;
 }
 
 export const DEFAULT_SETTINGS: PluginSettings = {
@@ -20,6 +22,8 @@ export const DEFAULT_SETTINGS: PluginSettings = {
     workspacePass: "",
     logLevel: LogLevel.WARN,
     conflictResolution: "merge",
+    nickname: "",
+    color: "#ff0000",
 };
 
 export class SettingTab extends PluginSettingTab {
@@ -77,21 +81,29 @@ export class SettingTab extends PluginSettingTab {
             );
 
         new Setting(containerEl)
-            .setName("Log level")
-            .setDesc("set console log level")
-            .addDropdown((component) =>
-                component
-                    .addOptions({
-                        "0": "Silent",
-                        "1": "Debug",
-                        "2": "Info",
-                        "3": "Warn",
-                        "4": "Error",
-                    })
-                    .setValue(this.plugin.settings.logLevel.toString())
+            .setName("Nickname")
+            .setDesc("Nickname showed to other clients")
+            .addText((text) =>
+                text
+                    .setPlaceholder("user")
+                    .setValue(this.plugin.settings.nickname)
                     .onChange((value) => {
-                        this.plugin.settings.logLevel = Number(value) as LogLevelType;
-                        log.setGlobalLevel(this.plugin.settings.logLevel);
+                        this.plugin.settings.nickname = value;
+                    }),
+            );
+
+        new Setting(containerEl)
+            .setName("Color")
+            .setDesc("Color showed to other clients")
+            .addText((text) =>
+                text
+                    .setPlaceholder("hexadecimal color")
+                    .setValue(this.plugin.settings.color)
+                    .onChange((value) => {
+                        if (!value.startsWith("#")) {
+                            return;
+                        }
+                        this.plugin.settings.color = value as `#${string}`;
                     }),
             );
 
@@ -108,6 +120,25 @@ export class SettingTab extends PluginSettingTab {
                     .setValue(this.plugin.settings.conflictResolution.toString())
                     .onChange((value: ConflictResolution) => {
                         this.plugin.settings.conflictResolution = value;
+                    }),
+            );
+
+        new Setting(containerEl)
+            .setName("Log level")
+            .setDesc("set console log level")
+            .addDropdown((component) =>
+                component
+                    .addOptions({
+                        "0": "Silent",
+                        "1": "Debug",
+                        "2": "Info",
+                        "3": "Warn",
+                        "4": "Error",
+                    })
+                    .setValue(this.plugin.settings.logLevel.toString())
+                    .onChange((value) => {
+                        this.plugin.settings.logLevel = Number(value) as LogLevelType;
+                        log.setGlobalLevel(this.plugin.settings.logLevel);
                     }),
             );
 

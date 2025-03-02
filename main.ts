@@ -93,8 +93,8 @@ export default class Syncinator extends Plugin {
 
                 this.cursorEventBus.emit("local-cursor-update", {
                     path: path,
-                    label: "user",
-                    color: `#${"ff0000"}`,
+                    label: this.settings.nickname,
+                    color: this.settings.color,
                     left: cursorCoords.left,
                     bottom: cursorCoords.bottom,
                 });
