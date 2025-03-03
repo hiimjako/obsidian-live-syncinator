@@ -52,8 +52,8 @@ export interface CursorPosition {
     path: string;
     label: string;
     color: `#${string}`;
-    left: number;
-    bottom: number;
+    line: number;
+    ch: number;
 }
 
 export interface CursorPositionWithId extends CursorPosition {

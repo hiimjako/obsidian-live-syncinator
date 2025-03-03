@@ -65,7 +65,7 @@ export class Syncinator {
         this.wsClient.onChunkMessage(this.handleChunkMessage.bind(this));
         this.wsClient.onEventMessage(this.handleEventMessage.bind(this));
         this.wsClient.onCursorMessage(this.handleCursorMessage.bind(this));
-        this.contracts.cursorEventBus.on("local-cursor-update", this.sendCursor.bind(this));
+        this.contracts.cursorEventBus.on("local-cursor-update", this.sendCursorPosition.bind(this));
         this.wsClient.connect();
 
         this.contracts.obsidianEventBus.on("create", this.create.bind(this));
@@ -500,7 +500,7 @@ export class Syncinator {
         });
     }
 
-    async sendCursor(cursor: CursorPosition) {
+    async sendCursorPosition(cursor: CursorPosition) {
         if (!this.fileCache.hasByPath(cursor.path)) {
             return;
         }
@@ -517,8 +517,8 @@ export class Syncinator {
             path: cursor.path,
             label: cursor.label,
             color: cursor.color,
-            left: cursor.left,
-            bottom: cursor.bottom,
+            line: cursor.line,
+            ch: cursor.ch,
         });
     }
 

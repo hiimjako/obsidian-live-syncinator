@@ -30,8 +30,8 @@ export interface CursorMessage extends MessageHeader {
     path: string;
     label: string;
     color: `#${string}`;
-    left: number;
-    bottom: number;
+    line: number;
+    ch: number;
 }
 
 type Options = {

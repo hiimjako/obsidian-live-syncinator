@@ -56,6 +56,30 @@ export default class Syncinator extends Plugin {
         this.registerEvent(
             this.app.vault.on("modify", (file) => {
                 this.obsidianEventBus.emit("modify", { file });
+
+                // send cursor position
+                const activeView = this.app.workspace.activeEditor;
+                // Make sure we have a valid view and it's the file that was modified
+                if (!activeView || !activeView.file || activeView.file.path !== file.path) {
+                    return;
+                }
+
+                // Get the editor from the active view
+                const editor = activeView.editor;
+                if (!editor) {
+                    log.error("No active editor found");
+                    return;
+                }
+
+                const cursor = editor.getCursor();
+
+                this.cursorEventBus.emit("local-cursor-update", {
+                    path: activeView.file.path,
+                    label: this.settings.nickname,
+                    color: this.settings.color,
+                    line: cursor.line,
+                    ch: cursor.ch,
+                });
             }),
         );
 
@@ -68,36 +92,6 @@ export default class Syncinator extends Plugin {
         this.registerEvent(
             this.app.vault.on("rename", (file, oldPath) => {
                 this.obsidianEventBus.emit("rename", { file, oldPath });
-            }),
-        );
-    }
-
-    registerCursors() {
-        this.registerEvent(
-            this.app.workspace.on("editor-change", (editor: Editor) => {
-                const cursor = editor.getCursor();
-
-                //@ts-ignore
-                const cursorCoords = editor.coordsAtPos(cursor);
-                if (!cursorCoords) {
-                    log.error("impossible to get cursor cords");
-                    return;
-                }
-                const activeView = this.app.workspace.getActiveViewOfType(MarkdownView);
-                const path = activeView?.file?.path ?? "";
-
-                if (path === "") {
-                    log.error("invalid path for cursor");
-                    return;
-                }
-
-                this.cursorEventBus.emit("local-cursor-update", {
-                    path: path,
-                    label: this.settings.nickname,
-                    color: this.settings.color,
-                    left: cursorCoords.left,
-                    bottom: cursorCoords.bottom,
-                });
             }),
         );
     }
@@ -143,7 +137,6 @@ export default class Syncinator extends Plugin {
         // Deferred startup
         setTimeout(async () => {
             await this.registerSyncinator();
-            this.registerCursors();
             new Notice("Obsidian Live Syncinator inizialized");
         }, 2000);
     }
