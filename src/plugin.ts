@@ -10,7 +10,14 @@ import {
     type WsClient,
 } from "./api/ws";
 import { FileCache } from "./cache";
-import { type DiffChunk, applyDiffs, computeDiff, invertDiff, transform } from "./diff/diff";
+import {
+    type DiffChunk,
+    applyDiff,
+    applyDiffs,
+    computeDiff,
+    invertDiff,
+    transform,
+} from "./diff/diff";
 import { type Deque, DequeRegistry } from "./messageQueue";
 import type { FileDiff } from "./modals/conflict";
 import type { Disk } from "./storage/storage";
@@ -47,7 +54,8 @@ export class Syncinator {
     private messageQueueRegistry = new DequeRegistry<number, ChunkMessage>();
     options: Options = { conflictResolution: "remote" };
     contracts: Contracts;
-    private pendingModifications: Map<number, Promise<void>> = new Map();
+    private modifyPendingModifications: Map<number, Promise<void>> = new Map();
+    private onChunkPendingModifications: Map<number, Promise<void>> = new Map();
 
     constructor(
         storage: Disk,
@@ -264,23 +272,33 @@ export class Syncinator {
     // ---------- ChunkMessage ---------
     async handleChunkMessage(data: ChunkMessage) {
         log.debug("[socket]: chunk message", data);
+        const { fileId, version } = data;
+        const file = this.fileCache.getById(fileId);
+
+        if (!file) {
+            throw new Error(`File '${fileId}' not found`);
+        }
+
+        if (!isTextMime(file.mimeType) || typeof file.content !== "string") {
+            return;
+        }
+
+        if (version < file.version) {
+            log.warn(`recived old message from ws: ${version} current ${file.version}`);
+        }
+
+        const pending = this.modifyPendingModifications.get(fileId);
+        if (pending) {
+            await pending;
+        }
+
+        let resolveModification: () => void;
+        const modificationPromise = new Promise<void>((resolve) => {
+            resolveModification = resolve;
+        });
+        this.onChunkPendingModifications.set(fileId, modificationPromise);
+
         try {
-            const { fileId, version } = data;
-            const file = this.fileCache.getById(fileId);
-
-            if (!file) {
-                throw new Error(`File '${fileId}' not found`);
-            }
-
-            if (version < file.version) {
-                log.warn(`recived old message from ws: ${version} current ${file.version}`);
-            }
-
-            const pending = this.pendingModifications.get(fileId);
-            if (pending) {
-                await pending;
-            }
-
             let updatedContent = file.content;
             const deque = this.messageQueueRegistry.getDeque(fileId);
             const isAckMessage = !deque.isEmpty() && isSameChunkMessage(data, deque.peekFront());
@@ -288,16 +306,15 @@ export class Syncinator {
                 updatedContent = applyDiffs(file.content as string, data.chunks);
                 this.handleAckMessage(file, deque);
             } else {
+                const chunksToPersist = await this.getChunksToPersist(data, file);
+                updatedContent = await this.storage.readText(file.workspacePath);
                 // reverting the optimistic changes
                 if (!deque.isEmpty()) {
-                    await this.handleOutOfSyncChunks(file, deque);
+                    updatedContent = this.handleOutOfSyncChunks(file, deque, updatedContent);
                 }
 
-                const chunksToPersist = await this.getChunksToPersist(data, file);
-                updatedContent = await this.storage.persistChunks(
-                    file.workspacePath,
-                    chunksToPersist,
-                );
+                updatedContent = applyDiffs(updatedContent, chunksToPersist);
+                await this.storage.write(file.workspacePath, updatedContent, { force: true });
             }
 
             file.version = version;
@@ -305,6 +322,10 @@ export class Syncinator {
             this.fileCache.setById(file.id, file);
         } catch (error) {
             log.error(error);
+        } finally {
+            // biome-ignore lint/style/noNonNullAssertion: <explanation>
+            resolveModification!();
+            this.onChunkPendingModifications.delete(fileId);
         }
     }
 
@@ -313,7 +334,11 @@ export class Syncinator {
         deque.removeFront();
     }
 
-    private async handleOutOfSyncChunks(file: File, deque: Deque<ChunkMessage>): Promise<void> {
+    private handleOutOfSyncChunks(
+        file: File,
+        deque: Deque<ChunkMessage>,
+        initialContent: string,
+    ): string {
         log.debug(`[onChunkMessage] chunk out of sync ${file.workspacePath} ${file.id}`);
 
         const messages: ChunkMessage[] = [];
@@ -321,6 +346,7 @@ export class Syncinator {
             messages.push(deque.removeFront());
         }
 
+        let content = initialContent;
         for (let i = messages.length - 1; i >= 0; i--) {
             const cm = messages[i];
             const appliedChunks: DiffChunk[] = [];
@@ -334,11 +360,13 @@ export class Syncinator {
                     inverse = transform(appliedChunk, inverse);
                 }
 
-                await this.storage.persistChunk(file.workspacePath, inverse);
+                content = applyDiff(content, inverse);
 
                 appliedChunks.unshift(inverse);
             }
         }
+
+        return content;
     }
 
     private async getChunksToPersist(data: ChunkMessage, file: File): Promise<DiffChunk[]> {
@@ -572,13 +600,18 @@ export class Syncinator {
             return;
         }
 
+        const pending = this.onChunkPendingModifications.get(cachedFile.id);
+        if (pending) {
+            await pending;
+        }
+
         let resolveModification: () => void;
         const modificationPromise = new Promise<void>((resolve) => {
             resolveModification = resolve;
         });
 
         // Store the pending modification
-        this.pendingModifications.set(cachedFile.id, modificationPromise);
+        this.modifyPendingModifications.set(cachedFile.id, modificationPromise);
 
         try {
             const newContent = await this.storage.readText(file.path);
@@ -594,7 +627,7 @@ export class Syncinator {
         } finally {
             // biome-ignore lint/style/noNonNullAssertion: <explanation>
             resolveModification!();
-            this.pendingModifications.delete(cachedFile.id);
+            this.modifyPendingModifications.delete(cachedFile.id);
         }
     }
 
