@@ -63,4 +63,5 @@ export interface CursorPositionWithId extends CursorPosition {
 export type CursorEventMap = {
     "remote-cursor-update": CursorPositionWithId;
     "local-cursor-update": CursorPosition;
+    "trigger-cursor-update": string;
 };

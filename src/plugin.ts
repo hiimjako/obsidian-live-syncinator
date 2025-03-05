@@ -588,6 +588,9 @@ export class Syncinator {
             // it is updated only on ack.
             log.debug("modify", { fileId: cachedFile.id, chunks, newContent });
             this.sendChunks(cachedFile.id, cachedFile.version, chunks);
+            if (chunks.length > 0) {
+                this.contracts.cursorEventBus.emit("trigger-cursor-update", file.path);
+            }
         } finally {
             // biome-ignore lint/style/noNonNullAssertion: <explanation>
             resolveModification!();

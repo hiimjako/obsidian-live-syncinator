@@ -56,30 +56,6 @@ export default class Syncinator extends Plugin {
         this.registerEvent(
             this.app.vault.on("modify", (file) => {
                 this.obsidianEventBus.emit("modify", { file });
-
-                // send cursor position
-                const activeView = this.app.workspace.activeEditor;
-                // Make sure we have a valid view and it's the file that was modified
-                if (!activeView || !activeView.file || activeView.file.path !== file.path) {
-                    return;
-                }
-
-                // Get the editor from the active view
-                const editor = activeView.editor;
-                if (!editor) {
-                    log.error("No active editor found");
-                    return;
-                }
-
-                const cursor = editor.getCursor();
-
-                this.cursorEventBus.emit("local-cursor-update", {
-                    path: activeView.file.path,
-                    label: this.settings.nickname,
-                    color: this.settings.color,
-                    line: cursor.line,
-                    ch: cursor.ch,
-                });
             }),
         );
 
@@ -94,6 +70,32 @@ export default class Syncinator extends Plugin {
                 this.obsidianEventBus.emit("rename", { file, oldPath });
             }),
         );
+
+        this.cursorEventBus.on("trigger-cursor-update", async (filepath) => {
+            // send cursor position
+            const activeView = this.app.workspace.activeEditor;
+            // Make sure we have a valid view and it's the file that was modified
+            if (!activeView || !activeView.file || activeView.file.path !== filepath) {
+                return;
+            }
+
+            // Get the editor from the active view
+            const editor = activeView.editor;
+            if (!editor) {
+                log.error("No active editor found");
+                return;
+            }
+
+            const cursor = editor.getCursor();
+
+            this.cursorEventBus.emit("local-cursor-update", {
+                path: activeView.file.path,
+                label: this.settings.nickname,
+                color: this.settings.color,
+                line: cursor.line,
+                ch: cursor.ch,
+            });
+        });
     }
 
     private async refreshToken() {
