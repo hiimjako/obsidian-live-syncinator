@@ -27,7 +27,7 @@ export default class Syncinator extends Plugin {
     private cursorEnv = new CursorEnv(
         this.cursorEventBus,
         () => this.app.workspace.getActiveViewOfType(MarkdownView),
-        1_000,
+        5_000,
     );
 
     async registerSyncinator() {
