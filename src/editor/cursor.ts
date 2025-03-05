@@ -32,9 +32,9 @@ export class CursorEnv {
 
             const cursor = this.cursors.get(data.id);
 
-            cursor?.positionAtTextCoordinates(activeEditor.editor, data.line, data.ch);
-
-            this.resetCursorTimer(data.id);
+            if (cursor?.positionAtTextCoordinates(activeEditor.editor, data.line, data.ch)) {
+                this.resetCursorTimer(data.id);
+            }
         });
 
         bus.on("local-cursor-update", async (data) => {
@@ -115,6 +115,17 @@ export class UserCursor {
         } else {
             log.error("missing container for cursors");
         }
+        this.hide();
+    }
+
+    hide() {
+        if (!this.cursorElement) return;
+        this.cursorElement.style.display = "none";
+    }
+
+    show() {
+        if (!this.cursorElement) return;
+        this.cursorElement.style.display = "block";
     }
 
     positionAtTextCoordinates(editor: Editor, line: number, ch: number): boolean {
@@ -126,25 +137,15 @@ export class UserCursor {
                 document.querySelector(".workspace-leaf.mod-active .cm-editor") ||
                 document.querySelector(".workspace-leaf.mod-active .CodeMirror");
 
-            // Safety check - can't position without an editor
             if (!editorElement) return false;
 
-            // In newer Obsidian, we need to use different API methods
-            // Instead of directly using coordsAtPos, use the editor's posAtCoords method first
-
-            // Get the editor's view
-            // @ts-ignore - Use internal Obsidian APIs
+            // @ts-ignore
             const view = editor.cm;
             if (!view) {
                 log.error("Cannot access CodeMirror instance");
                 return false;
             }
 
-            // Get document position for the cursor
-            // Instead of trying to convert coordinates, let's use a different approach
-            // Manually position the cursor by getting the actual DOM elements
-
-            // Find the line element in the DOM
             const lineElements = editorElement.querySelectorAll(".cm-line");
             if (line >= lineElements.length) {
                 log.error("Line out of range");
@@ -157,28 +158,22 @@ export class UserCursor {
                 return false;
             }
 
-            // Get the line element's position
-            const lineRect = lineElement.getBoundingClientRect();
+            const charRect = getCharPosition(lineElement, ch - 1);
+            if (!charRect) {
+                log.error("Char out of range");
+                return false;
+            }
+
             const editorRect = editorElement.getBoundingClientRect();
 
-            // Position at the beginning of the requested line (safer approach)
-            const relativeLeft = lineRect.left - editorRect.left + ch * 8; // Approximate char width
-            const relativeTop = lineRect.top - editorRect.top + lineRect.height;
+            const relativeLeft = charRect.left - editorRect.left;
+            const relativeTop = charRect.top - editorRect.top + charRect.height;
 
-            // Position the element
             this.cursorElement.style.position = "absolute";
             this.cursorElement.style.left = `${relativeLeft}px`;
             this.cursorElement.style.top = `${relativeTop}px`;
+            this.show();
 
-            // Make sure cursor is in the right container
-            // const cmContent = editorElement.querySelector(".cm-content") || editorElement;
-            // if (this.cursorElement.parentElement !== cmContent) {
-            //     if (this.cursorElement.parentElement) {
-            //         this.cursorElement.parentElement.removeChild(this.cursorElement);
-            //     }
-            //     cmContent.appendChild(this.cursorElement);
-            // }
-            //
             return true;
         } catch (error) {
             log.error("Failed to position cursor:", error);
@@ -192,4 +187,27 @@ export class UserCursor {
             this.cursorElement = null;
         }
     }
+}
+
+function getCharPosition(element: Element, charIndex: number) {
+    const range = document.createRange();
+
+    const textNode = element.firstChild;
+    if (!textNode) {
+        return;
+    }
+
+    range.setStart(textNode, charIndex);
+    range.setEnd(textNode, charIndex + 1);
+
+    const rect = range.getBoundingClientRect();
+
+    return {
+        left: rect.left,
+        top: rect.top,
+        right: rect.right,
+        bottom: rect.bottom,
+        width: rect.width,
+        height: rect.height,
+    };
 }
