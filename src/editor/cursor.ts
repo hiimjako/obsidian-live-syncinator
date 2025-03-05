@@ -15,7 +15,6 @@ export class CursorEnv {
         this.inactivityTimeoutMs = inactivityTimeoutMs;
 
         bus.on("remote-cursor-update", async (data) => {
-            console.log(data);
             const activeEditor = getActiveEditor();
             if (activeEditor === null) {
                 log.error("impossible retrive current active editor");
@@ -35,7 +34,6 @@ export class CursorEnv {
 
             cursor?.positionAtTextCoordinates(activeEditor.editor, data.line, data.ch);
 
-            // cursor?.updatePosition(data.left, data.bottom);
             this.resetCursorTimer(data.id);
         });
 
@@ -138,7 +136,7 @@ export class UserCursor {
             // @ts-ignore - Use internal Obsidian APIs
             const view = editor.cm;
             if (!view) {
-                console.error("Cannot access CodeMirror instance");
+                log.error("Cannot access CodeMirror instance");
                 return false;
             }
 
@@ -149,13 +147,13 @@ export class UserCursor {
             // Find the line element in the DOM
             const lineElements = editorElement.querySelectorAll(".cm-line");
             if (line >= lineElements.length) {
-                console.error("Line out of range");
+                log.error("Line out of range");
                 return false;
             }
 
             const lineElement = lineElements[line];
             if (!lineElement) {
-                console.error("Could not find line element");
+                log.error("Could not find line element");
                 return false;
             }
 
@@ -183,7 +181,7 @@ export class UserCursor {
             //
             return true;
         } catch (error) {
-            console.error("Failed to position cursor:", error);
+            log.error("Failed to position cursor:", error);
             return false;
         }
     }
