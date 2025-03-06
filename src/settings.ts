@@ -100,7 +100,7 @@ export class SettingTab extends PluginSettingTab {
                     .setPlaceholder("hexadecimal color")
                     .setValue(this.plugin.settings.color)
                     .onChange((value) => {
-                        if (!value.startsWith("#")) {
+                        if (!isValidHexColor(value)) {
                             return;
                         }
                         this.plugin.settings.color = value as `#${string}`;
@@ -166,4 +166,9 @@ function createInfoBox(parentEl: HTMLElement): HTMLElement {
     parentEl.createEl("br");
 
     return infoBox;
+}
+
+function isValidHexColor(color: string): boolean {
+    const hexColorRegex = /^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$/;
+    return hexColorRegex.test(color);
 }
