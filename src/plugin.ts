@@ -2,15 +2,35 @@ import type { TAbstractFile } from "obsidian";
 import path from "path-browserify";
 import { log } from "src/logger/logger";
 import type { ApiClient, File, FileWithContent } from "./api/api";
-import { type ChunkMessage, type EventMessage, MessageType, type WsClient } from "./api/ws";
+import {
+    type ChunkMessage,
+    type CursorMessage,
+    type EventMessage,
+    MessageType,
+    type WsClient,
+} from "./api/ws";
 import { FileCache } from "./cache";
-import { type DiffChunk, applyDiffs, computeDiff, invertDiff, transform } from "./diff/diff";
+import {
+    type DiffChunk,
+    applyDiff,
+    applyDiffs,
+    computeDiff,
+    invertDiff,
+    transform,
+} from "./diff/diff";
 import { type Deque, DequeRegistry } from "./messageQueue";
 import type { FileDiff } from "./modals/conflict";
 import type { Disk } from "./storage/storage";
 import { shallowEqualStrict } from "./utils/comparison";
 import { generateSHA256Hash } from "./utils/crypto";
-import type { EventBus, ObsidianEventMap, Snapshot, SnapshotEventMap } from "./utils/eventBus";
+import type {
+    CursorEventMap,
+    CursorPosition,
+    EventBus,
+    ObsidianEventMap,
+    Snapshot,
+    SnapshotEventMap,
+} from "./utils/eventBus";
 import { isTextMime } from "./utils/mime";
 import { sleep } from "./utils/sleep";
 
@@ -23,6 +43,7 @@ interface Contracts {
     diffModal(filename: string, local: FileDiff, remote: FileDiff): Promise<string>;
     snapshotEventBus: EventBus<SnapshotEventMap>;
     obsidianEventBus: EventBus<ObsidianEventMap>;
+    cursorEventBus: EventBus<CursorEventMap>;
 }
 
 export class Syncinator {
@@ -33,25 +54,27 @@ export class Syncinator {
     private messageQueueRegistry = new DequeRegistry<number, ChunkMessage>();
     options: Options = { conflictResolution: "remote" };
     contracts: Contracts;
-    private pendingModifications: Map<number, Promise<void>> = new Map();
+    private modifyPendingModifications: Map<number, Promise<void>> = new Map();
+    private onChunkPendingModifications: Map<number, Promise<void>> = new Map();
 
     constructor(
         storage: Disk,
         apiClient: ApiClient,
         wsClient: WsClient,
-        modals: Contracts,
+        contracts: Contracts,
         opts: Options,
     ) {
         this.storage = storage;
         this.apiClient = apiClient;
         this.wsClient = wsClient;
+        this.contracts = contracts;
+        this.options = opts;
 
         this.wsClient.onChunkMessage(this.handleChunkMessage.bind(this));
         this.wsClient.onEventMessage(this.handleEventMessage.bind(this));
+        this.wsClient.onCursorMessage(this.handleCursorMessage.bind(this));
+        this.contracts.cursorEventBus.on("local-cursor-update", this.sendCursorPosition.bind(this));
         this.wsClient.connect();
-
-        this.contracts = modals;
-        this.options = opts;
 
         this.contracts.obsidianEventBus.on("create", this.create.bind(this));
         this.contracts.obsidianEventBus.on("delete", this.delete.bind(this));
@@ -248,23 +271,34 @@ export class Syncinator {
 
     // ---------- ChunkMessage ---------
     async handleChunkMessage(data: ChunkMessage) {
+        log.debug("[socket]: chunk message", data);
+        const { fileId, version } = data;
+        const file = this.fileCache.getById(fileId);
+
+        if (!file) {
+            throw new Error(`File '${fileId}' not found`);
+        }
+
+        if (!isTextMime(file.mimeType) || typeof file.content !== "string") {
+            return;
+        }
+
+        if (version < file.version) {
+            log.warn(`recived old message from ws: ${version} current ${file.version}`);
+        }
+
+        const pending = this.modifyPendingModifications.get(fileId);
+        if (pending) {
+            await pending;
+        }
+
+        let resolveModification: () => void;
+        const modificationPromise = new Promise<void>((resolve) => {
+            resolveModification = resolve;
+        });
+        this.onChunkPendingModifications.set(fileId, modificationPromise);
+
         try {
-            const { fileId, version } = data;
-            const file = this.fileCache.getById(fileId);
-
-            if (!file) {
-                throw new Error(`File '${fileId}' not found`);
-            }
-
-            if (version < file.version) {
-                log.warn(`recived old message from ws: ${version} current ${file.version}`);
-            }
-
-            const pending = this.pendingModifications.get(fileId);
-            if (pending) {
-                await pending;
-            }
-
             let updatedContent = file.content;
             const deque = this.messageQueueRegistry.getDeque(fileId);
             const isAckMessage = !deque.isEmpty() && isSameChunkMessage(data, deque.peekFront());
@@ -272,16 +306,15 @@ export class Syncinator {
                 updatedContent = applyDiffs(file.content as string, data.chunks);
                 this.handleAckMessage(file, deque);
             } else {
+                const chunksToPersist = await this.getChunksToPersist(data, file);
+                updatedContent = await this.storage.readText(file.workspacePath);
                 // reverting the optimistic changes
                 if (!deque.isEmpty()) {
-                    await this.handleOutOfSyncChunks(file, deque);
+                    updatedContent = this.handleOutOfSyncChunks(file, deque, updatedContent);
                 }
 
-                const chunksToPersist = await this.getChunksToPersist(data, file);
-                updatedContent = await this.storage.persistChunks(
-                    file.workspacePath,
-                    chunksToPersist,
-                );
+                updatedContent = applyDiffs(updatedContent, chunksToPersist);
+                await this.storage.write(file.workspacePath, updatedContent, { force: true });
             }
 
             file.version = version;
@@ -289,6 +322,10 @@ export class Syncinator {
             this.fileCache.setById(file.id, file);
         } catch (error) {
             log.error(error);
+        } finally {
+            // biome-ignore lint/style/noNonNullAssertion: <explanation>
+            resolveModification!();
+            this.onChunkPendingModifications.delete(fileId);
         }
     }
 
@@ -297,7 +334,11 @@ export class Syncinator {
         deque.removeFront();
     }
 
-    private async handleOutOfSyncChunks(file: File, deque: Deque<ChunkMessage>): Promise<void> {
+    private handleOutOfSyncChunks(
+        file: File,
+        deque: Deque<ChunkMessage>,
+        initialContent: string,
+    ): string {
         log.debug(`[onChunkMessage] chunk out of sync ${file.workspacePath} ${file.id}`);
 
         const messages: ChunkMessage[] = [];
@@ -305,6 +346,7 @@ export class Syncinator {
             messages.push(deque.removeFront());
         }
 
+        let content = initialContent;
         for (let i = messages.length - 1; i >= 0; i--) {
             const cm = messages[i];
             const appliedChunks: DiffChunk[] = [];
@@ -318,11 +360,13 @@ export class Syncinator {
                     inverse = transform(appliedChunk, inverse);
                 }
 
-                await this.storage.persistChunk(file.workspacePath, inverse);
+                content = applyDiff(content, inverse);
 
                 appliedChunks.unshift(inverse);
             }
         }
+
+        return content;
     }
 
     private async getChunksToPersist(data: ChunkMessage, file: File): Promise<DiffChunk[]> {
@@ -460,7 +504,7 @@ export class Syncinator {
     }
 
     async handleEventMessage(event: EventMessage) {
-        log.debug("[socket]: message", event);
+        log.debug("[socket]: event message", event);
         switch (event.type) {
             case MessageType.Create:
                 await this.handleCreateEvent(event);
@@ -475,6 +519,37 @@ export class Syncinator {
                 log.error(`[socket] unknown event ${event}`);
         }
     }
+
+    async handleCursorMessage(cursor: CursorMessage) {
+        log.debug("[socket]: cursor message", cursor);
+        this.contracts.cursorEventBus.emit("remote-cursor-update", {
+            id: cursor.id ?? "",
+            ...cursor,
+        });
+    }
+
+    async sendCursorPosition(cursor: CursorPosition) {
+        if (!this.fileCache.hasByPath(cursor.path)) {
+            return;
+        }
+
+        const cachedFile = this.fileCache.getByPath(cursor.path);
+        if (cachedFile == null) {
+            log.error(`file '${cursor.path}' not found`);
+            return;
+        }
+
+        this.wsClient.sendMessage({
+            type: MessageType.Cursor,
+            fileId: cachedFile.id,
+            path: cursor.path,
+            label: cursor.label,
+            color: cursor.color,
+            line: cursor.line,
+            ch: cursor.ch,
+        });
+    }
+
     // ---------- END ---------
 
     // ---------- Obsidian events ---------
@@ -525,13 +600,18 @@ export class Syncinator {
             return;
         }
 
+        const pending = this.onChunkPendingModifications.get(cachedFile.id);
+        if (pending) {
+            await pending;
+        }
+
         let resolveModification: () => void;
         const modificationPromise = new Promise<void>((resolve) => {
             resolveModification = resolve;
         });
 
         // Store the pending modification
-        this.pendingModifications.set(cachedFile.id, modificationPromise);
+        this.modifyPendingModifications.set(cachedFile.id, modificationPromise);
 
         try {
             const newContent = await this.storage.readText(file.path);
@@ -541,10 +621,13 @@ export class Syncinator {
             // it is updated only on ack.
             log.debug("modify", { fileId: cachedFile.id, chunks, newContent });
             this.sendChunks(cachedFile.id, cachedFile.version, chunks);
+            if (chunks.length > 0) {
+                this.contracts.cursorEventBus.emit("trigger-cursor-update", file.path);
+            }
         } finally {
             // biome-ignore lint/style/noNonNullAssertion: <explanation>
             resolveModification!();
-            this.pendingModifications.delete(cachedFile.id);
+            this.modifyPendingModifications.delete(cachedFile.id);
         }
     }
 

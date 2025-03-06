@@ -7,6 +7,7 @@ export enum MessageType {
     Create = 1,
     Delete = 2,
     Rename = 3,
+    Cursor = 4,
 }
 
 export interface MessageHeader {
@@ -24,6 +25,15 @@ export interface EventMessage extends MessageHeader {
     objectType: "file" | "folder";
 }
 
+export interface CursorMessage extends MessageHeader {
+    id?: string;
+    path: string;
+    label: string;
+    color: `#${string}`;
+    line: number;
+    ch: number;
+}
+
 type Options = {
     maxReconnectAttempts?: number;
     reconnectIntervalMs?: number;
@@ -32,7 +42,7 @@ type Options = {
 };
 
 type RetryQueueItem = {
-    message: ChunkMessage | EventMessage;
+    message: ChunkMessage | EventMessage | CursorMessage;
     attempts: number;
     timestamp: number;
 };
@@ -57,12 +67,16 @@ export class WsClient {
     private onErrorHandler?: (e: globalThis.Event) => void;
     private onChunkMessageHandler: (_: ChunkMessage) => Promise<void> = async () => {};
     private onEventMessageHandler: (_: EventMessage) => Promise<void> = async () => {};
+    private onCursorMessageHandler: (_: CursorMessage) => Promise<void> = async () => {};
 
     private chunkMessageQueue = new AsyncMessageQueue<ChunkMessage>(async (message) => {
         await this.onChunkMessageHandler(message);
     });
     private eventMessageQueue = new AsyncMessageQueue<EventMessage>(async (msg) => {
         await this.onEventMessageHandler(msg);
+    });
+    private cursorMessageQueue = new AsyncMessageQueue<CursorMessage>(async (msg) => {
+        await this.onCursorMessageHandler(msg);
     });
 
     constructor(scheme: "ws" | "wss", domain: string, options: Options = {}) {
@@ -93,6 +107,10 @@ export class WsClient {
 
     onEventMessage(handler: (_: EventMessage) => Promise<void>) {
         this.onEventMessageHandler = handler;
+    }
+
+    onCursorMessage(handler: (_: CursorMessage) => Promise<void>) {
+        this.onCursorMessageHandler = handler;
     }
 
     setAuthorization(token: string) {
@@ -135,7 +153,7 @@ export class WsClient {
 
         this.ws.onmessage = (event: MessageEvent<string>) => {
             try {
-                const msg: ChunkMessage | EventMessage = JSON.parse(event.data);
+                const msg: ChunkMessage | EventMessage | CursorMessage = JSON.parse(event.data);
 
                 log.debug("[ws] received message", msg);
                 switch (msg.type) {
@@ -146,6 +164,9 @@ export class WsClient {
                     case MessageType.Delete:
                     case MessageType.Rename:
                         this.eventMessageQueue.enqueue(msg as EventMessage);
+                        break;
+                    case MessageType.Cursor:
+                        this.cursorMessageQueue.enqueue(msg as CursorMessage);
                         break;
                     default:
                         log.error("message type:", msg.type, "not supported");
@@ -217,7 +238,7 @@ export class WsClient {
     }
 
     private async sendMessageWithRetry(
-        msg: ChunkMessage | EventMessage,
+        msg: ChunkMessage | EventMessage | CursorMessage,
         previousAttempts = 0,
     ): Promise<void> {
         if (!this.isConnected) {
@@ -259,7 +280,7 @@ export class WsClient {
         };
     }
 
-    sendMessage(msg: ChunkMessage | EventMessage) {
+    sendMessage(msg: ChunkMessage | EventMessage | CursorMessage) {
         this.sendMessageWithRetry(msg, 0).catch((error) => {
             log.error("Failed to send or queue message:", error);
         });

@@ -1,9 +1,15 @@
-import { Notice, Plugin } from "obsidian";
+import { MarkdownView, Notice, Plugin } from "obsidian";
+import { CursorEnv } from "src/editor/cursor";
 import { log } from "src/logger/logger";
 import { DiffModal, type FileDiff } from "src/modals/conflict";
 import { Syncinator as SyncinatorPlugin } from "src/plugin";
 import { Disk } from "src/storage/storage";
-import { EventBus, type ObsidianEventMap, type SnapshotEventMap } from "src/utils/eventBus";
+import {
+    type CursorEventMap,
+    EventBus,
+    type ObsidianEventMap,
+    type SnapshotEventMap,
+} from "src/utils/eventBus";
 import { SnapshotView, VIEW_TYPE_SNAPSHOT } from "src/views/snapshots";
 import { ApiClient } from "./src/api/api";
 import { HttpClient } from "./src/api/http";
@@ -15,17 +21,21 @@ export default class Syncinator extends Plugin {
     private wsClient: WsClient;
     private storage: Disk;
     private apiClient: ApiClient;
+    snapshotEventBus = new EventBus<SnapshotEventMap>();
+    obsidianEventBus = new EventBus<ObsidianEventMap>();
+    cursorEventBus = new EventBus<CursorEventMap>();
+    private cursorEnv: CursorEnv | undefined;
 
-    async registerPlugin(snapshotEventBus: EventBus<SnapshotEventMap>) {
-        const obsidianEventBus = new EventBus<ObsidianEventMap>();
+    async registerSyncinator() {
         const plugin = new SyncinatorPlugin(
             this.storage,
             this.apiClient,
             this.wsClient,
             {
                 diffModal: this.wrappedDiffModal.bind(this),
-                snapshotEventBus,
-                obsidianEventBus,
+                snapshotEventBus: this.snapshotEventBus,
+                obsidianEventBus: this.obsidianEventBus,
+                cursorEventBus: this.cursorEventBus,
             },
             {
                 conflictResolution: this.settings.conflictResolution,
@@ -36,26 +46,52 @@ export default class Syncinator extends Plugin {
 
         this.registerEvent(
             this.app.vault.on("create", (file) => {
-                obsidianEventBus.emit("create", { file });
+                this.obsidianEventBus.emit("create", { file });
             }),
         );
         this.registerEvent(
             this.app.vault.on("modify", (file) => {
-                obsidianEventBus.emit("modify", { file });
+                this.obsidianEventBus.emit("modify", { file });
             }),
         );
 
         this.registerEvent(
             this.app.vault.on("delete", (file) => {
-                obsidianEventBus.emit("delete", { file });
+                this.obsidianEventBus.emit("delete", { file });
             }),
         );
 
         this.registerEvent(
             this.app.vault.on("rename", (file, oldPath) => {
-                obsidianEventBus.emit("rename", { file, oldPath });
+                this.obsidianEventBus.emit("rename", { file, oldPath });
             }),
         );
+
+        this.cursorEventBus.on("trigger-cursor-update", async (filepath) => {
+            // send cursor position
+            const activeView = this.app.workspace.activeEditor;
+            // Make sure we have a valid view and it's the file that was modified
+            if (!activeView || !activeView.file || activeView.file.path !== filepath) {
+                return;
+            }
+
+            // Get the editor from the active view
+            const editor = activeView.editor;
+            if (!editor) {
+                log.error("No active editor found");
+                return;
+            }
+
+            const cursor = editor.getCursor();
+
+            this.cursorEventBus.emit("local-cursor-update", {
+                path: activeView.file.path,
+                label: this.settings.nickname,
+                color: this.settings.color,
+                line: cursor.line,
+                ch: cursor.ch,
+            });
+        });
     }
 
     private async refreshToken() {
@@ -96,9 +132,17 @@ export default class Syncinator extends Plugin {
         this.registerView(VIEW_TYPE_SNAPSHOT, (leaf) => new SnapshotView(leaf, snapshotEventBus));
         this.app.workspace.onLayoutReady(() => this.activateSnapshotView());
 
+        if (this.settings.showCursors) {
+            this.cursorEnv = new CursorEnv(
+                this.cursorEventBus,
+                () => this.app.workspace.getActiveViewOfType(MarkdownView),
+                5_000,
+            );
+        }
+
         // Deferred startup
         setTimeout(async () => {
-            await this.registerPlugin(snapshotEventBus);
+            await this.registerSyncinator();
             new Notice("Obsidian Live Syncinator inizialized");
         }, 2000);
     }
@@ -106,6 +150,7 @@ export default class Syncinator extends Plugin {
     onunload() {
         this.app.workspace.detachLeavesOfType(VIEW_TYPE_SNAPSHOT);
         this.wsClient.close(true);
+        this.cursorEnv?.close();
     }
 
     async loadSettings() {
