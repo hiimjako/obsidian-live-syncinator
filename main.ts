@@ -1,4 +1,4 @@
-import { type Editor, MarkdownView, Notice, Plugin } from "obsidian";
+import { MarkdownView, Notice, Plugin } from "obsidian";
 import { CursorEnv } from "src/editor/cursor";
 import { log } from "src/logger/logger";
 import { DiffModal, type FileDiff } from "src/modals/conflict";
@@ -24,11 +24,7 @@ export default class Syncinator extends Plugin {
     snapshotEventBus = new EventBus<SnapshotEventMap>();
     obsidianEventBus = new EventBus<ObsidianEventMap>();
     cursorEventBus = new EventBus<CursorEventMap>();
-    private cursorEnv = new CursorEnv(
-        this.cursorEventBus,
-        () => this.app.workspace.getActiveViewOfType(MarkdownView),
-        5_000,
-    );
+    private cursorEnv: CursorEnv | undefined;
 
     async registerSyncinator() {
         const plugin = new SyncinatorPlugin(
@@ -136,6 +132,14 @@ export default class Syncinator extends Plugin {
         this.registerView(VIEW_TYPE_SNAPSHOT, (leaf) => new SnapshotView(leaf, snapshotEventBus));
         this.app.workspace.onLayoutReady(() => this.activateSnapshotView());
 
+        if (this.settings.showCursors) {
+            this.cursorEnv = new CursorEnv(
+                this.cursorEventBus,
+                () => this.app.workspace.getActiveViewOfType(MarkdownView),
+                5_000,
+            );
+        }
+
         // Deferred startup
         setTimeout(async () => {
             await this.registerSyncinator();
@@ -146,7 +150,7 @@ export default class Syncinator extends Plugin {
     onunload() {
         this.app.workspace.detachLeavesOfType(VIEW_TYPE_SNAPSHOT);
         this.wsClient.close(true);
-        this.cursorEnv.close();
+        this.cursorEnv?.close();
     }
 
     async loadSettings() {
