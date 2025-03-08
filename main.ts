@@ -128,8 +128,10 @@ export default class Syncinator extends Plugin {
             window.setInterval(async () => await this.refreshToken(), 5 * 60 * 1000),
         );
 
-        const snapshotEventBus = new EventBus<SnapshotEventMap>();
-        this.registerView(VIEW_TYPE_SNAPSHOT, (leaf) => new SnapshotView(leaf, snapshotEventBus));
+        this.registerView(
+            VIEW_TYPE_SNAPSHOT,
+            (leaf) => new SnapshotView(leaf, this.snapshotEventBus),
+        );
         this.app.workspace.onLayoutReady(() => this.activateSnapshotView());
 
         if (this.settings.showCursors) {
