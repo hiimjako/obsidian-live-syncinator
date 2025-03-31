@@ -24,7 +24,7 @@
 	"devDependencies": {
 		"@biomejs/biome": "^1.9.4",
 		"@types/diff": "^7.0.1",
-		"@types/node": "^22.13.9",
+		"@types/node": "^22.13.14",
 		"@types/path-browserify": "^1.0.3",
 		"@types/ws": "^8.5.14",
 		"builtin-modules": "^5.0.0",
