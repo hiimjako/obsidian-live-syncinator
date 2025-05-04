@@ -825,14 +825,17 @@ export class Syncinator {
 
     sendChunks(fileId: number, version: number, chunks: DiffChunk[]) {
         if (chunks.length > 0) {
-            const msg: ChunkMessage = {
-                type: MessageType.Chunk,
-                fileId,
-                chunks,
-                version,
-            };
-            this.messageQueueRegistry.getDeque(fileId).addBack(msg);
-            this.wsClient.sendMessage(msg);
+            const chunkSize = 10;
+            for (let i = 0; i < chunks.length; i += chunkSize) {
+                const msg: ChunkMessage = {
+                    type: MessageType.Chunk,
+                    fileId,
+                    chunks: chunks.slice(i, i + chunkSize),
+                    version,
+                };
+                this.messageQueueRegistry.getDeque(fileId).addBack(msg);
+                this.wsClient.sendMessage(msg);
+            }
         }
     }
 
