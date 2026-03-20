@@ -175,17 +175,19 @@ export class Multipart {
                 }
             }
 
-            // parsing value
-            for (let j = components.length - 1; j > lastIndexProcessed; j--) {
-                const component = components[j];
+            // parsing value: skip the blank line after headers, collect everything until trailing empty
+            const bodyStart = lastIndexProcessed + 2; // +1 for blank line separator, +1 for 0-index
+            let bodyEnd = components.length - 1;
+            while (bodyEnd >= bodyStart && components[bodyEnd].length === 0) {
+                bodyEnd--;
+            }
 
-                if (component.length !== 0) {
-                    if (part.isBase64) {
-                        part.value = base64ToArrayBuffer(component.trim());
-                    } else {
-                        part.value = component.trim();
-                    }
-                    break;
+            if (bodyEnd >= bodyStart) {
+                const bodyContent = components.slice(bodyStart, bodyEnd + 1).join("\r\n");
+                if (part.isBase64) {
+                    part.value = base64ToArrayBuffer(bodyContent);
+                } else {
+                    part.value = bodyContent;
                 }
             }
 

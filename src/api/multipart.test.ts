@@ -36,6 +36,37 @@ content\r
         assert.equal(contentType, `multipart/form-data; boundary=${multipart.boundary}`);
     });
 
+    test("should parse multipart with multi-line content", () => {
+        const boundary = "test-boundary";
+        const fileContent = "line1\r\nline2\r\nline3";
+        const rawMultipart = `--${boundary}\r\nContent-Disposition: form-data; name="metadata"\r\n\r\n{"id":1}\r\n--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="doc.md"\r\nContent-Type: text/plain\r\n\r\n${fileContent}\r\n--${boundary}--\r\n`;
+
+        const encoder = new TextEncoder();
+        const multipart = new Multipart().parseParts(
+            `multipart/mixed; boundary=${boundary}`,
+            encoder.encode(rawMultipart).buffer,
+        );
+
+        assert.equal(multipart.fileds.length, 1);
+        assert.equal(multipart.fileds[0].value, '{"id":1}');
+        assert.equal(multipart.files.length, 1);
+        assert.equal(multipart.files[0].value, fileContent);
+    });
+
+    test("should preserve trailing whitespace in content", () => {
+        const boundary = "test-boundary";
+        const fileContent = "hello\n";
+        const rawMultipart = `--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="doc.md"\r\nContent-Type: text/plain\r\n\r\n${fileContent}\r\n--${boundary}--\r\n`;
+
+        const encoder = new TextEncoder();
+        const multipart = new Multipart().parseParts(
+            `multipart/mixed; boundary=${boundary}`,
+            encoder.encode(rawMultipart).buffer,
+        );
+
+        assert.equal(multipart.files[0].value, fileContent);
+    });
+
     test("should parse multipart", () => {
         const boundary = "random-boundary";
         const rawMultipart = `--${boundary}\r
