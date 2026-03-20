@@ -115,6 +115,27 @@ describe("modify serialization", () => {
         assert.deepEqual(msg2.chunks, [{ type: Operation.Add, position: 2, text: "c", len: 1 }]);
     });
 
+    test("large diffs should be sent as a single message, not batched", async () => {
+        const file = { path: filepath, vault, parent: null, name: "test.md" };
+
+        // Create old/new content with many scattered differences to produce >10 chunks
+        const oldContent = Array.from({ length: 20 }, (_, i) => `word${i}`).join(" ");
+        const newContent = Array.from({ length: 20 }, (_, i) => `changed${i}`).join(" ");
+
+        // Set cache to oldContent first
+        await storage.write(filepath, oldContent, { force: true });
+        await obsidianEventBus.emit("modify", { file });
+        sendMessage.mock.resetCalls();
+
+        // Now create a diff with many chunks
+        await storage.write(filepath, newContent, { force: true });
+        await obsidianEventBus.emit("modify", { file });
+
+        assert.equal(sendMessage.mock.callCount(), 1);
+        const msg = sendMessage.mock.calls[0].arguments[0] as ChunkMessage;
+        assert.ok(msg.chunks.length > 10, `expected >10 chunks, got ${msg.chunks.length}`);
+    });
+
     test("ACK should not re-apply content that was optimistically updated", async () => {
         const file = { path: filepath, vault, parent: null, name: "test.md" };
 
