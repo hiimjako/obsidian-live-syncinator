@@ -216,6 +216,18 @@ describe("transform", () => {
             op2: { type: Operation.Add, position: 6, text: "xyz", len: 3 } as DiffChunk,
             expected: { type: Operation.Add, position: 3, text: "xyz", len: 3 } as DiffChunk,
         },
+        {
+            name: "Insert inside Remove range should expand Remove length",
+            op1: { type: Operation.Add, position: 3, text: "XY", len: 2 } as DiffChunk,
+            op2: { type: Operation.Remove, position: 1, text: "bcde", len: 4 } as DiffChunk,
+            expected: { type: Operation.Remove, position: 1, text: "bcde", len: 6 } as DiffChunk,
+        },
+        {
+            name: "Insert at start of Remove range should shift position",
+            op1: { type: Operation.Add, position: 1, text: "XY", len: 2 } as DiffChunk,
+            op2: { type: Operation.Remove, position: 1, text: "bcde", len: 4 } as DiffChunk,
+            expected: { type: Operation.Remove, position: 3, text: "bcde", len: 4 } as DiffChunk,
+        },
     ];
 
     for (const { name, op1, op2, expected } of tests) {

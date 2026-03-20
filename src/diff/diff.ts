@@ -106,6 +106,8 @@ export function transform(lastOp: DiffChunk, opToTransform: DiffChunk): DiffChun
                 case Operation.Remove:
                     if (lastOp.position <= opToTransform.position) {
                         transformed.position += lastOp.len;
+                    } else if (lastOp.position < opToTransform.position + opToTransform.len) {
+                        transformed.len += lastOp.len;
                     }
                     break;
             }
