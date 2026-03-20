@@ -303,7 +303,6 @@ export class Syncinator {
             const deque = this.messageQueueRegistry.getDeque(fileId);
             const isAckMessage = !deque.isEmpty() && isSameChunkMessage(data, deque.peekFront());
             if (isAckMessage) {
-                updatedContent = applyDiffs(file.content as string, data.chunks);
                 this.handleAckMessage(file, deque);
             } else {
                 const chunksToPersist = await this.getChunksToPersist(data, file);
@@ -600,9 +599,14 @@ export class Syncinator {
             return;
         }
 
-        const pending = this.onChunkPendingModifications.get(cachedFile.id);
-        if (pending) {
-            await pending;
+        const pendingChunk = this.onChunkPendingModifications.get(cachedFile.id);
+        if (pendingChunk) {
+            await pendingChunk;
+        }
+
+        const pendingModify = this.modifyPendingModifications.get(cachedFile.id);
+        if (pendingModify) {
+            await pendingModify;
         }
 
         let resolveModification: () => void;
@@ -610,18 +614,21 @@ export class Syncinator {
             resolveModification = resolve;
         });
 
-        // Store the pending modification
         this.modifyPendingModifications.set(cachedFile.id, modificationPromise);
 
         try {
             const newContent = await this.storage.readText(file.path);
             const chunks = computeDiff(cachedFile.content, newContent);
 
-            // the cache content is not updated because we are still on older version
-            // it is updated only on ack.
             log.debug("modify", { fileId: cachedFile.id, chunks, newContent });
             this.sendChunks(cachedFile.id, cachedFile.version, chunks);
+
+            // Optimistically update cache content so subsequent modifies
+            // diff against the latest content, not stale cache.
+            // Version is NOT updated here — only on ACK.
             if (chunks.length > 0) {
+                cachedFile.content = newContent;
+                this.fileCache.setById(cachedFile.id, cachedFile);
                 this.contracts.cursorEventBus.emit("trigger-cursor-update", file.path);
             }
         } finally {
