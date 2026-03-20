@@ -276,7 +276,8 @@ export class Syncinator {
         const file = this.fileCache.getById(fileId);
 
         if (!file) {
-            throw new Error(`File '${fileId}' not found`);
+            log.warn(`[onChunkMessage] file '${fileId}' not in cache, skipping`);
+            return;
         }
 
         if (!isTextMime(file.mimeType) || typeof file.content !== "string") {

@@ -136,6 +136,17 @@ describe("modify serialization", () => {
         assert.ok(msg.chunks.length > 10, `expected >10 chunks, got ${msg.chunks.length}`);
     });
 
+    test("handleChunkMessage should not throw on unknown fileId", async () => {
+        await assert.doesNotReject(async () => {
+            await syncinator.handleChunkMessage({
+                type: MessageType.Chunk,
+                fileId: 9999,
+                chunks: [{ type: Operation.Add, position: 0, text: "x", len: 1 }],
+                version: 1,
+            });
+        });
+    });
+
     test("ACK should not re-apply content that was optimistically updated", async () => {
         const file = { path: filepath, vault, parent: null, name: "test.md" };
 
