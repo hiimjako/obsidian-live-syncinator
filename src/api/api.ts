@@ -98,7 +98,7 @@ export class ApiClient {
 
         const multipart = new Multipart().parseParts(contentType, res.data);
         const filePart = multipart.files?.[0] ?? null;
-        const metadataPart = multipart.fileds.find((field) => field.name === "metadata");
+        const metadataPart = multipart.fields.find((field) => field.name === "metadata");
 
         if (!metadataPart || !filePart) {
             throw new Error("Incomplete multipart response");
@@ -142,7 +142,7 @@ export class ApiClient {
 
         const multipart = new Multipart().parseParts(contentType, res.data);
         const filePart = multipart.files?.[0] ?? null;
-        const metadataPart = multipart.fileds.find((field) => field.name === "metadata");
+        const metadataPart = multipart.fields.find((field) => field.name === "metadata");
 
         if (!metadataPart || !filePart) {
             throw new Error("Incomplete multipart response");

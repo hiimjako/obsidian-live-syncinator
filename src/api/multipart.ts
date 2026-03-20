@@ -29,7 +29,7 @@ export class Multipart {
         return this._files;
     }
 
-    public get fileds(): FormField[] {
+    public get fields(): FormField[] {
         return this._fields;
     }
 
@@ -52,9 +52,9 @@ export class Multipart {
         return this;
     }
 
-    createFormField(filedname: string, value: string): Multipart {
+    createFormField(fieldname: string, value: string): Multipart {
         this._fields.push({
-            name: filedname,
+            name: fieldname,
             value,
         });
         return this;
@@ -197,7 +197,7 @@ export class Multipart {
             }
 
             if (part.filename === "") {
-                this.fileds.push({
+                this.fields.push({
                     name: part.name,
                     value: part.value as string,
                 });

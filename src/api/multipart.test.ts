@@ -47,8 +47,8 @@ content\r
             encoder.encode(rawMultipart).buffer,
         );
 
-        assert.equal(multipart.fileds.length, 1);
-        assert.equal(multipart.fileds[0].value, '{"id":1}');
+        assert.equal(multipart.fields.length, 1);
+        assert.equal(multipart.fields[0].value, '{"id":1}');
         assert.equal(multipart.files.length, 1);
         assert.equal(multipart.files[0].value, fileContent);
     });
@@ -121,7 +121,7 @@ foo\r
                 value: "content",
             },
         ]);
-        assert.deepEqual(multipart.fileds, [
+        assert.deepEqual(multipart.fields, [
             {
                 name: "field",
                 value: "foo",
