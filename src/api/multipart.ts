@@ -159,7 +159,7 @@ export class Multipart {
                 }
 
                 if (component.startsWith("Content-Disposition:")) {
-                    const nameMatch = component.match(/name="([^"]*)"/);
+                    const nameMatch = component.match(/(?:^|;\s*)name="([^"]*)"/);
                     const filenameMatch = component.match(/filename="([^"]*)"/);
 
                     part.name = nameMatch ? nameMatch[1].trim() : "";
@@ -192,7 +192,7 @@ export class Multipart {
             }
 
             // invalid part
-            if (part.name === "") {
+            if (part.name === "" && part.filename === "") {
                 continue;
             }
 

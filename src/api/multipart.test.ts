@@ -67,6 +67,23 @@ content\r
         assert.equal(multipart.files[0].value, fileContent);
     });
 
+    test("should not extract name from inside filename attribute", () => {
+        const boundary = "test-boundary";
+        const rawMultipart = `--${boundary}\r\nContent-Disposition: form-data; filename="doc.md"\r\nContent-Type: text/plain\r\n\r\nhello\r\n--${boundary}--\r\n`;
+
+        const encoder = new TextEncoder();
+        const multipart = new Multipart().parseParts(
+            `multipart/mixed; boundary=${boundary}`,
+            encoder.encode(rawMultipart).buffer,
+        );
+
+        // Part has filename but no name — should still be added as a file
+        assert.equal(multipart.files.length, 1);
+        assert.equal(multipart.files[0].filename, "doc.md");
+        // name should be empty, not "doc.md" extracted from filename
+        assert.equal(multipart.files[0].name, "");
+    });
+
     test("should parse multipart", () => {
         const boundary = "random-boundary";
         const rawMultipart = `--${boundary}\r
