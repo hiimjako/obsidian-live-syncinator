@@ -238,6 +238,35 @@ describe("transform", () => {
     }
 });
 
+describe("applyDiff with emoji (codepoint positions)", () => {
+    const tests = [
+        {
+            name: "add after emoji uses codepoint position",
+            text: "a😀b",
+            diff: { type: Operation.Add, position: 2, text: "X", len: 1 } as DiffChunk,
+            expected: "a😀Xb",
+        },
+        {
+            name: "remove after emoji uses codepoint position",
+            text: "a😀bc",
+            diff: { type: Operation.Remove, position: 2, text: "b", len: 1 } as DiffChunk,
+            expected: "a😀c",
+        },
+        {
+            name: "add at position 0 with emoji in text",
+            text: "😀hello",
+            diff: { type: Operation.Add, position: 0, text: "X", len: 1 } as DiffChunk,
+            expected: "X😀hello",
+        },
+    ];
+
+    for (const { name, text, diff, expected } of tests) {
+        test(name, () => {
+            assert.strictEqual(applyDiff(text, diff), expected);
+        });
+    }
+});
+
 describe("UTF-16 transform", () => {
     const tests = [
         {

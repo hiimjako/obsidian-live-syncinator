@@ -18,7 +18,7 @@ export function computeDiff(oldStr: string, newStr: string): DiffChunk[] {
     let position = 0;
 
     for (const change of charDifferences) {
-        const changeLength = change.value.length;
+        const changeLength = Array.from(change.value).length;
 
         if (change.added) {
             diffs.push({
@@ -52,9 +52,11 @@ export function applyDiffs(text: string, diffs: DiffChunk[]): string {
 }
 
 export function applyDiff(text: string, diff: DiffChunk): string {
+    const codepoints = Array.from(text);
+
     switch (diff.type) {
         case Operation.Add:
-            if (text === "") {
+            if (codepoints.length === 0) {
                 return diff.text;
             }
 
@@ -62,18 +64,29 @@ export function applyDiff(text: string, diff: DiffChunk): string {
                 return diff.text + text;
             }
 
-            return text.slice(0, diff.position) + diff.text + text.slice(diff.position);
+            if (diff.position >= codepoints.length) {
+                return text + diff.text;
+            }
+
+            return (
+                codepoints.slice(0, diff.position).join("") +
+                diff.text +
+                codepoints.slice(diff.position).join("")
+            );
 
         case Operation.Remove:
-            if (text === "") {
+            if (codepoints.length === 0) {
                 return "";
             }
 
             if (diff.position === 0) {
-                return text.slice(diff.len);
+                return codepoints.slice(diff.len).join("");
             }
 
-            return text.slice(0, diff.position) + text.slice(diff.position + diff.len);
+            return (
+                codepoints.slice(0, diff.position).join("") +
+                codepoints.slice(diff.position + diff.len).join("")
+            );
 
         default:
             throw new Error("Invalid operation type");
