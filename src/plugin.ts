@@ -52,6 +52,7 @@ export class Syncinator {
     private apiClient: ApiClient;
     private wsClient: WsClient;
     private messageQueueRegistry = new DequeRegistry<number, ChunkMessage>();
+    private initialized = false;
     options: Options = { conflictResolution: "remote" };
     contracts: Contracts;
     private modifyPendingModifications: Map<number, Promise<void>> = new Map();
@@ -73,6 +74,11 @@ export class Syncinator {
         this.wsClient.onChunkMessage(this.handleChunkMessage.bind(this));
         this.wsClient.onEventMessage(this.handleEventMessage.bind(this));
         this.wsClient.onCursorMessage(this.handleCursorMessage.bind(this));
+        this.wsClient.onOpen(() => {
+            if (this.initialized) {
+                this.fetchRemoteFiles();
+            }
+        });
         this.contracts.cursorEventBus.on("local-cursor-update", this.sendCursorPosition.bind(this));
         this.wsClient.connect();
 
@@ -91,6 +97,7 @@ export class Syncinator {
     async init() {
         await this.fetchRemoteFiles();
         await this.pushLocalFiles();
+        this.initialized = true;
     }
 
     /**

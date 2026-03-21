@@ -147,6 +147,27 @@ describe("modify serialization", () => {
         });
     });
 
+    test("should reconcile remote state on WS reconnect", async () => {
+        const _file = { path: filepath, vault, parent: null, name: "test.md" };
+
+        const fetchFiles = mock.method(apiClient, "fetchFiles", async () => []);
+        const _fetchFile = mock.method(apiClient, "fetchFile", async () => ({ ...fileStub }));
+
+        // Simulate init completing
+        await syncinator.init();
+        const callsAfterInit = fetchFiles.mock.callCount();
+
+        // Simulate WS reconnect by triggering the onOpen handler
+        // @ts-ignore - accessing private for test
+        wsClient.onOpenHandler?.();
+
+        // fetchRemoteFiles should be called again on reconnect
+        assert.ok(
+            fetchFiles.mock.callCount() > callsAfterInit,
+            "fetchFiles should be called on reconnect to reconcile state",
+        );
+    });
+
     test("ACK should not re-apply content that was optimistically updated", async () => {
         const file = { path: filepath, vault, parent: null, name: "test.md" };
 
