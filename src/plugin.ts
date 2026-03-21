@@ -62,6 +62,7 @@ export class Syncinator {
     contracts: Contracts;
     private modifyPendingModifications: Map<number, Promise<void>> = new Map();
     private onChunkPendingModifications: Map<number, Promise<void>> = new Map();
+    private suppressNextModify: Set<string> = new Set();
 
     constructor(
         storage: Disk,
@@ -326,6 +327,7 @@ export class Syncinator {
                 }
 
                 updatedContent = applyDiffs(updatedContent, chunksToPersist);
+                this.suppressNextModify.add(file.workspacePath);
                 await this.storage.write(file.workspacePath, updatedContent, { force: true });
             }
 
@@ -602,6 +604,12 @@ export class Syncinator {
 
     private async modify({ file }: { file: TAbstractFile }) {
         log.debug("[event]: modify", file);
+
+        if (this.suppressNextModify.has(file.path)) {
+            this.suppressNextModify.delete(file.path);
+            return;
+        }
+
         const cachedFile = this.fileCache.getByPath(file.path);
         if (cachedFile == null) {
             log.error(`file '${file.path}' not found`);
