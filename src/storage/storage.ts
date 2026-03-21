@@ -16,6 +16,18 @@ export class Disk {
         this.vault = vault;
     }
 
+    // modifyText updates a text file's content on both disk AND the active
+    // editor buffer. Use this instead of write() when patching files that may
+    // be open in the editor, to prevent the editor from saving stale content
+    // back to disk.
+    async modifyText(vaultPath: string, content: string): Promise<void> {
+        const file = this.vault.getFileByPath(vaultPath);
+        if (file == null) {
+            throw new Error(`file '${vaultPath}' doesn't exist`);
+        }
+        await this.vault.modify(file, content);
+    }
+
     async stat(vaultPath: string): Promise<Stat | null> {
         return this.vault.adapter.stat(vaultPath);
     }

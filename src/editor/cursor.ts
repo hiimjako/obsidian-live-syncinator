@@ -100,6 +100,7 @@ export class UserCursor {
 
         this.cursorElement = document.createElement("div");
         this.cursorElement.classList.add("cursor-name-box");
+        this.cursorElement.setAttribute("contenteditable", "false");
         this.cursorElement.textContent = label;
         this.cursorElement.style.color = color;
 
@@ -137,15 +138,16 @@ export class UserCursor {
                 return true;
             }
 
-            // Attach to contentDOM so the label scrolls with the text
-            const contentDom = view.contentDOM as HTMLElement;
-            if (this.cursorElement.parentNode !== contentDom) {
-                contentDom.appendChild(this.cursorElement);
+            // Attach to scrollDOM (NOT contentDOM) so CM6 doesn't
+            // interpret the label text as document content.
+            const scrollDom = view.scrollDOM as HTMLElement;
+            if (this.cursorElement.parentNode !== scrollDom) {
+                scrollDom.appendChild(this.cursorElement);
             }
 
-            const contentRect = contentDom.getBoundingClientRect();
-            const relativeLeft = coords.left - contentRect.left;
-            const relativeTop = coords.bottom - contentRect.top;
+            const scrollRect = scrollDom.getBoundingClientRect();
+            const relativeLeft = coords.left - scrollRect.left + scrollDom.scrollLeft;
+            const relativeTop = coords.bottom - scrollRect.top + scrollDom.scrollTop;
 
             this.cursorElement.style.position = "absolute";
             this.cursorElement.style.left = `${relativeLeft}px`;

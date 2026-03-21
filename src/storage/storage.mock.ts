@@ -64,6 +64,10 @@ export function CreateVaultMock(basepath: string): Vault {
                 path: normalizedPath,
             };
         },
+        async modify(file, data, _options) {
+            const vaultPath = fullPath(file.path);
+            await fs.writeFile(vaultPath, data, { encoding: "utf8" });
+        },
         async process(file, fn, _options) {
             const vaultPath = fullPath(file.path);
             const data = await fs.readFile(vaultPath, "utf8");

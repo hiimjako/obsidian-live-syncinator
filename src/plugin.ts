@@ -328,7 +328,7 @@ export class Syncinator {
 
                 updatedContent = applyDiffs(updatedContent, chunksToPersist);
                 this.suppressNextModify.add(file.workspacePath);
-                await this.storage.write(file.workspacePath, updatedContent, { force: true });
+                await this.storage.modifyText(file.workspacePath, updatedContent);
             }
 
             file.version = version;

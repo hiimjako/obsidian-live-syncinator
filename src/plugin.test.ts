@@ -1226,4 +1226,68 @@ describe("concurrent modifications", () => {
         const fileContent = await apiClient1.fetchFile(file.id);
         assert.equal(fileContent.content, finalContent1);
     });
+
+    test("should not echo remote changes back (no infinite loop)", async (t) => {
+        const content = "hello";
+        const filepath = "files/shared.md";
+
+        await apiClient1.createFile(filepath, content);
+        await storage1.write(filepath, content);
+        await syncinator1.init();
+        await syncinator2.init();
+
+        // Verify both clients start with the same content
+        assert.equal(await storage1.readText(filepath), content);
+        assert.equal(await storage2.readText(filepath), content);
+
+        // Spy on Client 2's outgoing messages (pass-through to real WS)
+        const sendMessage2 = t.mock.method(wsClient2, "sendMessage", wsClient2.sendMessage);
+
+        // Client 1 edits: "hello" -> "hello world"
+        const newContent = "hello world";
+        await storage1.write(filepath, newContent, { force: true });
+        await obsidianEventBus1.emit("modify", {
+            file: {
+                path: filepath,
+                vault: vault1,
+                parent: null,
+                name: "shared.md",
+            },
+        });
+
+        // Wait for propagation through the server to Client 2
+        await sleep(1000);
+
+        // Client 2 should have the new content in cache and on disk
+        const cache2 = syncinator2.cacheDump();
+        assert.equal(cache2[0].content, newContent);
+        assert.equal(await storage2.readText(filepath), newContent);
+
+        // Reset spy — we only care about messages sent AFTER the remote change landed
+        sendMessage2.mock.resetCalls();
+
+        // Simulate Obsidian firing modify events on Client 2.
+        // Event #1: consumed by suppressNextModify (the write-triggered event).
+        // Event #2: goes through the full modify handler (simulates the editor
+        //           saving its buffer back to disk — this is what caused the loop).
+        for (let i = 0; i < 2; i++) {
+            await obsidianEventBus2.emit("modify", {
+                file: {
+                    path: filepath,
+                    vault: vault2,
+                    parent: null,
+                    name: "shared.md",
+                },
+            });
+        }
+
+        await sleep(500);
+
+        // Client 2 must NOT send any chunks back — if it does, we have an echo loop
+        assert.equal(
+            sendMessage2.mock.callCount(),
+            0,
+            "Client 2 should not echo remote changes back to the server",
+        );
+    });
 });
