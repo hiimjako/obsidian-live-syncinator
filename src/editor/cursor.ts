@@ -131,22 +131,21 @@ export class UserCursor {
             const clampedCh = Math.min(ch, docLine.length);
             const pos = docLine.from + clampedCh;
 
-            // coordsAtPos returns null when the position is outside the viewport
             const coords = view.coordsAtPos(pos);
             if (!coords) {
                 this.hide();
                 return true;
             }
 
-            // Ensure cursor element is attached to the editor DOM
-            const editorDom = view.dom as HTMLElement;
-            if (this.cursorElement.parentNode !== editorDom) {
-                editorDom.appendChild(this.cursorElement);
+            // Attach to contentDOM so the label scrolls with the text
+            const contentDom = view.contentDOM as HTMLElement;
+            if (this.cursorElement.parentNode !== contentDom) {
+                contentDom.appendChild(this.cursorElement);
             }
 
-            const editorRect = editorDom.getBoundingClientRect();
-            const relativeLeft = coords.left - editorRect.left;
-            const relativeTop = coords.bottom - editorRect.top;
+            const contentRect = contentDom.getBoundingClientRect();
+            const relativeLeft = coords.left - contentRect.left;
+            const relativeTop = coords.bottom - contentRect.top;
 
             this.cursorElement.style.position = "absolute";
             this.cursorElement.style.left = `${relativeLeft}px`;
