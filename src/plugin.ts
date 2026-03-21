@@ -20,6 +20,7 @@ import {
 } from "./diff/diff";
 import { type Deque, DequeRegistry } from "./messageQueue";
 import type { FileDiff } from "./modals/conflict";
+import { isText } from "./storage/filetype";
 import type { Disk } from "./storage/storage";
 import { shallowEqualStrict } from "./utils/comparison";
 import { generateSHA256Hash } from "./utils/crypto";
@@ -33,6 +34,10 @@ import type {
 } from "./utils/eventBus";
 import { isTextMime } from "./utils/mime";
 import { sleep } from "./utils/sleep";
+
+function isTextFile(file: { mimeType: string; workspacePath: string }): boolean {
+    return isTextMime(file.mimeType) || isText(file.workspacePath);
+}
 
 export type ConflictResolution = "remote" | "local" | "merge";
 export interface Options {
@@ -287,7 +292,7 @@ export class Syncinator {
             return;
         }
 
-        if (!isTextMime(file.mimeType) || typeof file.content !== "string") {
+        if (!isTextFile(file) || typeof file.content !== "string") {
             return;
         }
 
@@ -603,7 +608,7 @@ export class Syncinator {
             return;
         }
 
-        if (!isTextMime(cachedFile.mimeType) || typeof cachedFile.content !== "string") {
+        if (!isTextFile(cachedFile) || typeof cachedFile.content !== "string") {
             return;
         }
 

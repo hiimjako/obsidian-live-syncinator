@@ -91,6 +91,33 @@ describe("modify serialization", () => {
         mock.restoreAll();
     });
 
+    test("modify should work when server returns application/octet-stream for text file", async () => {
+        const octetPath = "octet.md";
+        const octetFileStub = {
+            ...fileStub,
+            id: 99,
+            mimeType: "application/octet-stream",
+            workspacePath: octetPath,
+            content: "",
+        };
+        mock.method(apiClient, "fetchFile", async () => ({ ...octetFileStub }));
+
+        await syncinator.handleEventMessage({
+            type: MessageType.Create,
+            fileId: octetFileStub.id,
+            objectType: "file",
+            workspacePath: octetPath,
+        });
+
+        const file = { path: octetPath, vault, parent: null, name: "octet.md" };
+        await storage.write(octetPath, "hello", { force: true });
+        await obsidianEventBus.emit("modify", { file });
+
+        assert.equal(sendMessage.mock.callCount(), 1);
+        const msg = sendMessage.mock.calls[0].arguments[0] as ChunkMessage;
+        assert.ok(msg.chunks.length > 0, "should send chunks even with octet-stream mimeType");
+    });
+
     test("sequential modifies should produce incremental diffs, not overlapping", async () => {
         const file = { path: filepath, vault, parent: null, name: "test.md" };
 
