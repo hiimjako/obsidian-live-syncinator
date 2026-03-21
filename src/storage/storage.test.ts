@@ -89,6 +89,19 @@ describe("Disk storage integration tests", () => {
         }
     });
 
+    test("should persist chunks correctly with emoji (codepoint positions)", async () => {
+        const d = new Disk(v);
+        const fileName = randomUUID();
+        await d.write(fileName, "a😀b");
+
+        // Position 2 is after the emoji (codepoint-based), not inside it
+        const chunks = computeDiff("a😀b", "a😀Xb");
+        const content = await d.persistChunks(fileName, chunks);
+
+        assert.strictEqual(content, "a😀Xb");
+        assert.strictEqual(await d.readText(fileName), "a😀Xb");
+    });
+
     test("should return error on non-existing file", async () => {
         const d = new Disk(v);
 
