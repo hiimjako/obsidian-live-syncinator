@@ -17,7 +17,6 @@ export class CursorEnv {
         bus.on("remote-cursor-update", async (data) => {
             const activeEditor = getActiveEditor();
             if (activeEditor === null) {
-                log.error("impossible retrive current active editor");
                 return;
             }
 
@@ -95,7 +94,6 @@ export class CursorEnv {
 export class UserCursor {
     cursorElement: HTMLElement | null = null;
     path: string;
-    private editorContainer: HTMLElement | null = null;
 
     constructor(path: string, label: string, color: `#${string}`) {
         this.path = path;
@@ -105,16 +103,6 @@ export class UserCursor {
         this.cursorElement.textContent = label;
         this.cursorElement.style.color = color;
 
-        // Find the editor container - this is more reliable than body
-        this.editorContainer =
-            document.querySelector(".workspace-leaf.mod-active .cm-editor") ||
-            document.querySelector(".workspace-leaf.mod-active .CodeMirror");
-
-        if (this.editorContainer && this.cursorElement) {
-            this.editorContainer.appendChild(this.cursorElement);
-        } else {
-            log.error("missing container for cursors");
-        }
         this.hide();
     }
 
@@ -132,42 +120,33 @@ export class UserCursor {
         if (!this.cursorElement) return false;
 
         try {
-            // Get the active editor element
-            const editorElement =
-                document.querySelector(".workspace-leaf.mod-active .cm-editor") ||
-                document.querySelector(".workspace-leaf.mod-active .CodeMirror");
-
-            if (!editorElement) return false;
-
-            // @ts-expect-error
+            // @ts-expect-error accessing internal CM6 EditorView
             const view = editor.cm;
-            if (!view) {
-                log.error("Cannot access CodeMirror instance");
-                return false;
+            if (!view) return false;
+
+            const doc = view.state.doc;
+            if (line + 1 > doc.lines) return false;
+
+            const docLine = doc.line(line + 1);
+            const clampedCh = Math.min(ch, docLine.length);
+            const pos = docLine.from + clampedCh;
+
+            // coordsAtPos returns null when the position is outside the viewport
+            const coords = view.coordsAtPos(pos);
+            if (!coords) {
+                this.hide();
+                return true;
             }
 
-            const lineElements = editorElement.querySelectorAll(".cm-line");
-            if (line >= lineElements.length) {
-                log.error("Line out of range");
-                return false;
+            // Ensure cursor element is attached to the editor DOM
+            const editorDom = view.dom as HTMLElement;
+            if (this.cursorElement.parentNode !== editorDom) {
+                editorDom.appendChild(this.cursorElement);
             }
 
-            const lineElement = lineElements[line];
-            if (!lineElement) {
-                log.error("Could not find line element");
-                return false;
-            }
-
-            const charRect = getCharPosition(lineElement, ch - 1);
-            if (!charRect) {
-                log.error("Char out of range");
-                return false;
-            }
-
-            const editorRect = editorElement.getBoundingClientRect();
-
-            const relativeLeft = charRect.left - editorRect.left;
-            const relativeTop = charRect.top - editorRect.top + charRect.height;
+            const editorRect = editorDom.getBoundingClientRect();
+            const relativeLeft = coords.left - editorRect.left;
+            const relativeTop = coords.bottom - editorRect.top;
 
             this.cursorElement.style.position = "absolute";
             this.cursorElement.style.left = `${relativeLeft}px`;
@@ -176,7 +155,7 @@ export class UserCursor {
 
             return true;
         } catch (error) {
-            log.error("Failed to position cursor:", error);
+            log.debug("Failed to position cursor:", error);
             return false;
         }
     }
@@ -187,27 +166,4 @@ export class UserCursor {
             this.cursorElement = null;
         }
     }
-}
-
-function getCharPosition(element: Element, charIndex: number) {
-    const range = document.createRange();
-
-    const textNode = element.firstChild;
-    if (!textNode) {
-        return;
-    }
-
-    range.setStart(textNode, charIndex);
-    range.setEnd(textNode, charIndex + 1);
-
-    const rect = range.getBoundingClientRect();
-
-    return {
-        left: rect.left,
-        top: rect.top,
-        right: rect.right,
-        bottom: rect.bottom,
-        width: rect.width,
-        height: rect.height,
-    };
 }
