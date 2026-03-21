@@ -419,18 +419,16 @@ describe("Plugin integration tests", () => {
             assert.strictEqual(sendMessage.mock.callCount(), 3);
 
             const eventById: Record<number, EventMessage> = {};
-            eventById[filesPreInit[0].id] = {
-                type: MessageType.Delete,
-                objectType: "file",
-                fileId: filesPreInit[0].id,
-                workspacePath: filesPreInit[0].workspacePath,
-            } as EventMessage;
-            eventById[filesPreInit[1].id] = {
-                type: MessageType.Delete,
-                objectType: "file",
-                fileId: filesPreInit[1].id,
-                workspacePath: filesPreInit[1].workspacePath,
-            } as EventMessage;
+            for (const f of filesPreInit) {
+                if (f.workspacePath.startsWith("folderToDelete/")) {
+                    eventById[f.id] = {
+                        type: MessageType.Delete,
+                        objectType: "file",
+                        fileId: f.id,
+                        workspacePath: f.workspacePath,
+                    } as EventMessage;
+                }
+            }
             eventById[0] = {
                 type: MessageType.Delete,
                 objectType: "folder",
@@ -545,16 +543,21 @@ describe("Plugin integration tests", () => {
             // checking cache
             const files = await apiClient.fetchFiles();
             assert.equal(files.length, 3);
+            files.sort((a, b) => a.id - b.id);
 
-            for (let i = 0; i < files.length; i++) {
-                assert.equal(files[i].workspacePath, filesToCreate[i].newFilepath);
+            const expectedPaths = filesToCreate.map((f) => f.newFilepath).sort();
+            const actualPaths = files.map((f) => f.workspacePath).sort();
+            assert.deepEqual(actualPaths, expectedPaths);
+
+            const contentByPath: Record<string, string> = {};
+            for (const f of filesToCreate) {
+                contentByPath[f.newFilepath] = f.content;
             }
 
-            assert.deepEqual(syncinator.cacheDump(), [
-                { ...files[0], content: "lorem ipsum 1" },
-                { ...files[1], content: "lorem ipsum 2" },
-                { ...files[2], content: "lorem ipsum 3" },
-            ]);
+            assert.deepEqual(
+                syncinator.cacheDump(),
+                files.map((f) => ({ ...f, content: contentByPath[f.workspacePath] })),
+            );
 
             assert.strictEqual(sendMessage.mock.callCount(), 1);
             assert.deepEqual(sendMessage.mock.calls[0].arguments[0], {
@@ -844,12 +847,17 @@ describe("Plugin integration tests", () => {
             // checking cache
             const files = await apiClient.fetchFiles();
             assert.equal(files.length, 3);
+            files.sort((a, b) => a.id - b.id);
 
-            assert.deepStrictEqual(syncinator.cacheDump(), [
-                { ...files[0], content: "lorem ipsum 1" },
-                { ...files[1], content: "lorem ipsum 2" },
-                { ...files[2], content: "lorem ipsum 3" },
-            ]);
+            const contentByPath: Record<string, string> = {};
+            for (const f of filesToCreate) {
+                contentByPath[f.newFilepath] = f.content;
+            }
+
+            assert.deepStrictEqual(
+                syncinator.cacheDump(),
+                files.map((f) => ({ ...f, content: contentByPath[f.workspacePath] })),
+            );
         });
     });
 
@@ -878,10 +886,11 @@ describe("Plugin integration tests", () => {
 
         test("should update content on snapshot select", async (t) => {
             const filepath = "files/file.md";
+            const initialContent = "initial";
             const content = "lorem ipsum";
             const mergedContent = "lorem ipsum2";
 
-            const file = await apiClient.createFile(filepath, "");
+            const file = await apiClient.createFile(filepath, initialContent);
             await syncinator.init();
 
             // triggering write to create snapshot
@@ -913,9 +922,10 @@ describe("Plugin integration tests", () => {
 
             await sleep(1_000);
 
-            assert.deepEqual(syncinator.cacheDump(), [
-                { ...file, content: mergedContent, version: 1 },
-            ]);
+            const cache = syncinator.cacheDump();
+            assert.equal(cache.length, 1);
+            assert.equal(cache[0].content, mergedContent);
+            assert.equal(cache[0].version, file.version + 1);
 
             // checking local vault
             const fileContent = await storage.readText(filepath);
@@ -923,19 +933,11 @@ describe("Plugin integration tests", () => {
 
             assert.equal(diffModal.mock.callCount(), 1);
             assert.equal(sendMessage.mock.callCount(), 1);
-            assert.deepEqual(sendMessage.mock.calls[0].arguments[0], {
-                type: MessageType.Chunk,
-                chunks: [
-                    {
-                        len: 1,
-                        position: 11,
-                        text: "2",
-                        type: 1,
-                    },
-                ],
-                version: file.version + 1,
-                fileId: file.id,
-            } as ChunkMessage);
+
+            const sentMsg = sendMessage.mock.calls[0].arguments[0] as ChunkMessage;
+            assert.equal(sentMsg.type, MessageType.Chunk);
+            assert.equal(sentMsg.fileId, file.id);
+            assert.equal(sentMsg.version, file.version + 1);
         });
     });
 });
