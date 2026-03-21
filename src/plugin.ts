@@ -715,12 +715,18 @@ export class Syncinator {
                 return;
             }
         } else {
-            log.warn(`missing file for rename: "${oldPath}", probably a folder`);
             const oldWorkspacePath = oldPath.endsWith(path.sep) ? oldPath : oldPath + path.sep;
 
             const folderFiles = await this.storage.listFiles({
                 prefix: oldWorkspacePath,
             });
+
+            if (folderFiles.length === 0) {
+                log.debug(`[event]: rename skipped for "${oldPath}", file not yet in cache`);
+                return;
+            }
+
+            log.debug(`[event]: rename folder "${oldPath}"`);
 
             const renamePromises = folderFiles.map(async (folderFile) => {
                 const fileToRename = this.fileCache.getByPath(folderFile.path);
