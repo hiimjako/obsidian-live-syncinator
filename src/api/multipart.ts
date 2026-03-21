@@ -101,7 +101,7 @@ export class Multipart {
     private randomBoundary(): string {
         let boundary = Math.random().toString(36).substring(2) + Date.now().toString(36);
 
-        const specialChars = `()<>@,;:\\\"/[]?= `;
+        const specialChars = `()<>@,;:\\"/[]?= `;
 
         if (new RegExp(`[${specialChars}]`).test(boundary)) {
             boundary = `"${boundary}"`;

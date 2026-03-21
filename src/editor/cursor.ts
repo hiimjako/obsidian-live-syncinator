@@ -139,7 +139,7 @@ export class UserCursor {
 
             if (!editorElement) return false;
 
-            // @ts-ignore
+            // @ts-expect-error
             const view = editor.cm;
             if (!view) {
                 log.error("Cannot access CodeMirror instance");

@@ -152,8 +152,8 @@ export function CreateVaultMock(basepath: string): Vault {
                 basename: path.basename(normalizedPath),
                 stat: {
                     size: 1,
-                    ctime: new Date().getTime(),
-                    mtime: new Date().getTime(),
+                    ctime: Date.now(),
+                    mtime: Date.now(),
                 },
             };
         },
@@ -197,8 +197,8 @@ export function CreateVaultMock(basepath: string): Vault {
                 basename: path.basename(vaultPath),
                 stat: {
                     size: 1,
-                    ctime: new Date().getTime(),
-                    mtime: new Date().getTime(),
+                    ctime: Date.now(),
+                    mtime: Date.now(),
                 },
             };
         },

@@ -19,6 +19,7 @@ import {
     type Snapshot,
     type SnapshotEventMap,
 } from "./utils/eventBus";
+
 const sleep = promisify(setTimeout);
 
 async function assertEventually(assertion: () => Promise<void>, timeout = 5000, interval = 100) {

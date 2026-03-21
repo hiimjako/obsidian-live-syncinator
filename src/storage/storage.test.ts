@@ -120,7 +120,7 @@ describe("Disk storage integration tests", () => {
         await d.write(path2, "");
         await d.write(path3, "");
 
-        /*@ts-ignore*/
+        /*@ts-expect-error*/
         const listFilesNames = async (opts = {}): Promise<string[]> => {
             const files = await d.listFiles(opts);
             return files.map((file) => file.path);

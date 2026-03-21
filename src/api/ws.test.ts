@@ -4,8 +4,8 @@ import getPort from "get-port";
 import WebSocket from "ws";
 import { Operation } from "../diff/diff";
 import { sleep } from "../utils/sleep";
-import { MessageType, WsClient } from "./ws";
 import type { ChunkMessage } from "./ws";
+import { MessageType, WsClient } from "./ws";
 
 describe("WsClient with real WebSocket server", () => {
     let server: WebSocket.Server;

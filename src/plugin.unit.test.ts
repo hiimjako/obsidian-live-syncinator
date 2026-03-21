@@ -158,7 +158,7 @@ describe("modify serialization", () => {
         const callsAfterInit = fetchFiles.mock.callCount();
 
         // Simulate WS reconnect by triggering the onOpen handler
-        // @ts-ignore - accessing private for test
+        // @ts-expect-error - accessing private for test
         wsClient.onOpenHandler?.();
 
         // fetchRemoteFiles should be called again on reconnect

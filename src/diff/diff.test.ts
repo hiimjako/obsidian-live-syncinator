@@ -1,14 +1,14 @@
 import assert from "node:assert";
 import { describe, test } from "node:test";
+import type { DiffChunk } from "../diff/diff";
 import {
-    Operation,
     applyDiff,
     computeDiff,
     invertDiff,
+    Operation,
     transform,
     transformMultiple,
 } from "../diff/diff";
-import type { DiffChunk } from "../diff/diff";
 
 describe("compute diff should be compliant with server implemenation", () => {
     const testCases = [

@@ -1,5 +1,5 @@
-import { ItemView } from "obsidian";
 import type { IconName, TFile, WorkspaceLeaf } from "obsidian";
+import { ItemView } from "obsidian";
 import type { EventBus, Snapshot, SnapshotEventMap } from "../utils/eventBus";
 
 export const VIEW_TYPE_SNAPSHOT = "syncinator-snapshot-view";
