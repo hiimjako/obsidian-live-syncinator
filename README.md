@@ -7,15 +7,38 @@ It depends and requires [syncinator-server](https://github.com/hiimjako/obsidian
 
 Drawing inspiration from the inventive naming style of Heinz Doofenshmirtz (Phineas and Ferb).
 
+# Installation
+
+1. Build the plugin:
+   ```sh
+   npm install
+   npm run build
+   ```
+2. Copy the plugin into your vault:
+   ```sh
+   mkdir -p /path/to/your/vault/.obsidian/plugins/obsidian-syncinator
+   cp main.js manifest.json /path/to/your/vault/.obsidian/plugins/obsidian-syncinator/
+   ```
+3. Open (or restart) Obsidian
+4. Go to **Settings > Community plugins**, enable **Syncinator**
+5. Configure the server address and workspace credentials in the plugin settings
+
 # Development
 
-To test this plugin:
-
 1. Clone the repository
-1. Link the repository inside the `.obisdian/plugins` of your obsidian workspace
-1. Open/Reopen obsidian
-1. Enable plugin in the settings
-1. Configure plugin
+2. Install dependencies:
+   ```sh
+   npm install
+   ```
+3. Build in watch mode:
+   ```sh
+   npm run dev
+   ```
+4. Copy the built files into your vault's plugin folder (as above) after each change, or point `dev` output there directly
+5. Run tests:
+   ```sh
+   npm test
+   ```
 
 # Disclaimer
 
