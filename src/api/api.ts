@@ -56,6 +56,26 @@ interface AuthToken {
     token: string;
 }
 
+function parseMultipartResponse<T>(
+    contentType: string | null,
+    data: ArrayBuffer,
+): T & { content: string | ArrayBuffer } {
+    if (!contentType || !contentType.startsWith("multipart/mixed")) {
+        throw new Error("Unexpected Content-Type, expected multipart/mixed");
+    }
+
+    const multipart = new Multipart().parseParts(contentType, data);
+    const filePart = multipart.files?.[0] ?? null;
+    const metadataPart = multipart.fields.find((field) => field.name === "metadata");
+
+    if (!metadataPart || !filePart) {
+        throw new Error("Incomplete multipart response");
+    }
+
+    const metadata: T = JSON.parse(metadataPart.value);
+    return { ...metadata, content: filePart.value };
+}
+
 export class ApiClient {
     private client: HttpClient;
     constructor(client: HttpClient) {
@@ -91,29 +111,7 @@ export class ApiClient {
             throw new Error(`error while fetching file content ${res.data}`);
         }
 
-        const contentType = res.headers.get("Content-Type");
-        if (!contentType || !contentType.startsWith("multipart/mixed")) {
-            throw new Error("Unexpected Content-Type, expected multipart/mixed");
-        }
-
-        const multipart = new Multipart().parseParts(contentType, res.data);
-        const filePart = multipart.files?.[0] ?? null;
-        const metadataPart = multipart.fields.find((field) => field.name === "metadata");
-
-        if (!metadataPart || !filePart) {
-            throw new Error("Incomplete multipart response");
-        }
-
-        // Extract and parse the metadata
-        const metadata: File = JSON.parse(metadataPart.value);
-
-        // TODO: optimize this using streams
-        const fileWithContent: FileWithContent = {
-            ...metadata,
-            content: filePart.value,
-        };
-
-        return fileWithContent;
+        return parseMultipartResponse<File>(res.headers.get("Content-Type"), res.data);
     }
 
     async fetchSnapshots(fileId: number): Promise<Snapshot[]> {
@@ -135,29 +133,7 @@ export class ApiClient {
             throw new Error(`error while fetching snapshot content ${res.data}`);
         }
 
-        const contentType = res.headers.get("Content-Type");
-        if (!contentType || !contentType.startsWith("multipart/mixed")) {
-            throw new Error("Unexpected Content-Type, expected multipart/mixed");
-        }
-
-        const multipart = new Multipart().parseParts(contentType, res.data);
-        const filePart = multipart.files?.[0] ?? null;
-        const metadataPart = multipart.fields.find((field) => field.name === "metadata");
-
-        if (!metadataPart || !filePart) {
-            throw new Error("Incomplete multipart response");
-        }
-
-        // Extract and parse the metadata
-        const metadata: Snapshot = JSON.parse(metadataPart.value);
-
-        // TODO: optimize this using streams
-        const fileWithContent: SnapshotWithContent = {
-            ...metadata,
-            content: filePart.value,
-        };
-
-        return fileWithContent;
+        return parseMultipartResponse<Snapshot>(res.headers.get("Content-Type"), res.data);
     }
 
     async createFile(filepath: string, content: string | ArrayBuffer): Promise<File> {

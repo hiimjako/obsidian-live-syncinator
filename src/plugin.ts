@@ -10,6 +10,7 @@ import {
     type WsClient,
 } from "./api/ws";
 import { FileCache } from "./cache";
+import { isSameChunkMessage } from "./chunkUtils";
 import {
     applyDiff,
     applyDiffs,
@@ -20,9 +21,7 @@ import {
 } from "./diff/diff";
 import { type Deque, DequeRegistry } from "./messageQueue";
 import type { FileDiff } from "./modals/conflict";
-import { isText } from "./storage/filetype";
 import type { Disk } from "./storage/storage";
-import { shallowEqualStrict } from "./utils/comparison";
 import { generateSHA256Hash } from "./utils/crypto";
 import type {
     CursorEventMap,
@@ -32,12 +31,8 @@ import type {
     Snapshot,
     SnapshotEventMap,
 } from "./utils/eventBus";
-import { isTextMime } from "./utils/mime";
+import { isTextFile, isTextMime } from "./utils/mime";
 import { sleep } from "./utils/sleep";
-
-function isTextFile(file: { mimeType: string; workspacePath: string }): boolean {
-    return isTextMime(file.mimeType) || isText(file.workspacePath);
-}
 
 export type ConflictResolution = "remote" | "local" | "merge";
 export interface Options {
@@ -873,22 +868,4 @@ export class Syncinator {
     cacheDump() {
         return this.fileCache.dump().sort((a, b) => a.id - b.id);
     }
-}
-
-function isSameChunkMessage(fromWs: ChunkMessage, fromDeque: ChunkMessage): boolean {
-    if (fromWs.chunks.length !== fromDeque.chunks.length) {
-        return false;
-    }
-
-    for (let i = 0; i < fromWs.chunks.length; i++) {
-        if (!shallowEqualStrict(fromWs.chunks[i], fromDeque.chunks[i])) {
-            return false;
-        }
-    }
-
-    // +1 because this the server acks the message with a +1 version
-    const sameVersion = fromWs.version === fromDeque.version + 1;
-    const sameType = fromWs.type === fromDeque.type;
-
-    return sameVersion && sameType;
 }
