@@ -13,6 +13,7 @@ import { FileCache } from "./cache";
 import { getChunksToPersist, revertOptimisticChunks } from "./chunkHandler";
 import { isSameChunkMessage } from "./chunkUtils";
 import { applyDiffs, computeDiff, type DiffChunk } from "./diff/diff";
+import { handleEventMessage } from "./eventHandler";
 import { type Deque, DequeRegistry } from "./messageQueue";
 import type { FileDiff } from "./modals/conflict";
 import type { Disk } from "./storage/storage";
@@ -347,123 +348,12 @@ export class Syncinator {
     // ---------- END ---------
 
     // ---------- EventMessage ---------
-    async handleCreateEvent(event: EventMessage) {
-        if (event.objectType === "file") {
-            const fileApi = await this.apiClient.fetchFile(event.fileId);
-            this.fileCache.create(fileApi);
-            await this.storage.write(fileApi.workspacePath, fileApi.content);
-        } else if (event.objectType === "folder") {
-            await this.storage.write(event.workspacePath, "", { isDir: true });
-        } else {
-            log.error("[socket] unknown", event);
-        }
-    }
-
-    async handleDeleteEvent(event: EventMessage) {
-        if (event.objectType === "file") {
-            const file = this.fileCache.getById(event.fileId);
-            if (!file) {
-                log.warn(
-                    `[socket] cannot delete file ${event.fileId} as it is not present in current workspace`,
-                );
-                return;
-            }
-            await this.storage.delete(file.workspacePath, { force: true });
-            this.fileCache.deleteById(file.id);
-        } else if (event.objectType === "folder") {
-            const files = await this.storage.listFiles({
-                prefix: event.workspacePath,
-            });
-            for (const file of files) {
-                this.fileCache.deleteByPath(file.path);
-            }
-            await this.storage.delete(event.workspacePath, { force: true });
-        } else {
-            log.error("[socket] unknown", event);
-        }
-    }
-
-    async handleRenameEvent(event: EventMessage) {
-        if (event.objectType === "file") {
-            await this.handleFileRenameEvent(event);
-        } else if (event.objectType === "folder") {
-            await this.handleFolderRenameEvent(event);
-        } else {
-            log.error("[socket] unknown", event);
-        }
-    }
-
-    async handleFileRenameEvent(event: EventMessage) {
-        const file = this.fileCache.getById(event.fileId);
-        if (!file) {
-            log.warn(`[socket] cannot rename file ${event.fileId}. Fetching from remote`);
-            const fileApi = await this.apiClient.fetchFile(event.fileId);
-            this.fileCache.create(fileApi);
-            await this.storage.write(fileApi.workspacePath, fileApi.content);
-            return;
-        }
-
-        const fileApi = await this.apiClient.fetchFile(event.fileId);
-        const oldPath = file.workspacePath;
-        const newPath = fileApi.workspacePath;
-        this.fileCache.setPath(file.id, newPath);
-        await this.storage.rename(oldPath, newPath);
-    }
-
-    async handleFolderRenameEvent(event: EventMessage) {
-        const workspacePath = event.workspacePath.endsWith(path.sep)
-            ? event.workspacePath
-            : event.workspacePath + path.sep;
-
-        const files = await this.storage.listFiles({ prefix: workspacePath });
-        if (files.length === 0) {
-            log.error("[socket] trying to rename not existing folder");
-            return;
-        }
-
-        for (const file of files) {
-            const fileDesc = this.fileCache.getByPath(file.path);
-            if (!fileDesc) continue;
-
-            const fileApi = await this.apiClient.fetchFile(fileDesc.id);
-            const oldPath = fileDesc.workspacePath;
-            const newPath = fileApi.workspacePath;
-
-            if (oldPath !== newPath) {
-                this.fileCache.setUpdatedAt(fileDesc.id, fileApi.updatedAt);
-                this.fileCache.setPath(fileDesc.id, newPath);
-                await this.storage.rename(oldPath, fileApi.workspacePath);
-            }
-        }
-
-        // give time to obsidian to update cache
-        for (let i = 0; i < 10; i++) {
-            const filesPostRename = await this.storage.listFiles({
-                prefix: workspacePath,
-            });
-            if (filesPostRename.length === 0) {
-                this.storage.delete(event.workspacePath);
-                break;
-            }
-            await sleep(100);
-        }
-    }
-
     async handleEventMessage(event: EventMessage) {
-        log.debug("[socket]: event message", event);
-        switch (event.type) {
-            case MessageType.Create:
-                await this.handleCreateEvent(event);
-                break;
-            case MessageType.Delete:
-                await this.handleDeleteEvent(event);
-                break;
-            case MessageType.Rename:
-                await this.handleRenameEvent(event);
-                break;
-            default:
-                log.error(`[socket] unknown event ${event}`);
-        }
+        await handleEventMessage(event, {
+            apiClient: this.apiClient,
+            storage: this.storage,
+            fileCache: this.fileCache,
+        });
     }
 
     async handleCursorMessage(cursor: CursorMessage) {
