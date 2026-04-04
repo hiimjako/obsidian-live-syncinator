@@ -16,6 +16,10 @@ import { applyDiffs, computeDiff, type DiffChunk } from "./diff/diff";
 import { handleEventMessage } from "./eventHandler";
 import { type Deque, DequeRegistry } from "./messageQueue";
 import type { FileDiff } from "./modals/conflict";
+import {
+    snapshotFileChanged as handleSnapshotFileChanged,
+    snapshotSelected as handleSnapshotSelected,
+} from "./snapshotHandler";
 import type { Disk } from "./storage/storage";
 import { generateSHA256Hash } from "./utils/crypto";
 import type {
@@ -612,70 +616,21 @@ export class Syncinator {
 
     // ---------- Snapshot events ---------
     async snapshotFileChanged(data: { path: string }) {
-        log.debug("[snapshot]: file-changed", data);
-        const cachedFile = this.fileCache.getByPath(data.path);
-        if (cachedFile == null) {
-            log.error(`file '${data.path}' not found`);
-            return;
-        }
-
-        try {
-            const snapshot = await this.apiClient.fetchSnapshots(cachedFile.id);
-            this.contracts.snapshotEventBus.emit(
-                "snapshots-list-updated",
-                snapshot.map((snapshot) => {
-                    return {
-                        path: snapshot.workspacePath,
-                        version: snapshot.version,
-                        fileId: snapshot.fileId,
-                        createdAt: snapshot.createdAt,
-                    };
-                }),
-            );
-        } catch (error) {
-            log.error(error);
-        }
+        await handleSnapshotFileChanged(data, {
+            fileCache: this.fileCache,
+            apiClient: this.apiClient,
+            snapshotEventBus: this.contracts.snapshotEventBus,
+        });
     }
 
     async snapshotSelected(snapshot: Snapshot) {
-        log.debug("[snapshot]: snapshot-selected", snapshot);
-        const cachedFile = this.fileCache.getById(snapshot.fileId);
-        if (cachedFile == null) {
-            log.error(`file '${snapshot.fileId}' not found`);
-            return;
-        }
-
-        try {
-            const snapshotWithContent = await this.apiClient.fetchSnapshot(
-                snapshot.fileId,
-                snapshot.version,
-            );
-
-            const mergedContent = await this.contracts.diffModal(
-                cachedFile.workspacePath,
-                {
-                    content: cachedFile.content as string,
-                    lastUpdate: new Date(cachedFile.updatedAt),
-                },
-                {
-                    content: snapshotWithContent.content as string,
-                    lastUpdate: new Date(snapshotWithContent.createdAt),
-                },
-            );
-
-            const chunks = computeDiff(cachedFile.content as string, mergedContent);
-
-            cachedFile.content = mergedContent;
-            this.fileCache.setById(cachedFile.id, cachedFile);
-
-            await this.storage.write(cachedFile.workspacePath, mergedContent, {
-                force: true,
-            });
-
-            this.sendChunks(cachedFile.id, cachedFile.version, chunks);
-        } catch (error) {
-            log.error(error);
-        }
+        await handleSnapshotSelected(snapshot, {
+            fileCache: this.fileCache,
+            apiClient: this.apiClient,
+            diffModal: this.contracts.diffModal,
+            storage: this.storage,
+            sendChunks: this.sendChunks.bind(this),
+        });
     }
     // ---------- END ---------
 
