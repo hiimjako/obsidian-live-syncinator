@@ -10,15 +10,9 @@ import {
     type WsClient,
 } from "./api/ws";
 import { FileCache } from "./cache";
+import { getChunksToPersist, revertOptimisticChunks } from "./chunkHandler";
 import { isSameChunkMessage } from "./chunkUtils";
-import {
-    applyDiff,
-    applyDiffs,
-    computeDiff,
-    type DiffChunk,
-    invertDiff,
-    transform,
-} from "./diff/diff";
+import { applyDiffs, computeDiff, type DiffChunk } from "./diff/diff";
 import { type Deque, DequeRegistry } from "./messageQueue";
 import type { FileDiff } from "./modals/conflict";
 import type { Disk } from "./storage/storage";
@@ -314,11 +308,18 @@ export class Syncinator {
             if (isAckMessage) {
                 this.handleAckMessage(file, deque);
             } else {
-                const chunksToPersist = await this.getChunksToPersist(data, file);
+                const chunksToPersist = await getChunksToPersist(data, file, this.apiClient);
                 updatedContent = await this.storage.readText(file.workspacePath);
                 // reverting the optimistic changes
                 if (!deque.isEmpty()) {
-                    updatedContent = this.handleOutOfSyncChunks(file, deque, updatedContent);
+                    log.debug(
+                        `[onChunkMessage] chunk out of sync ${file.workspacePath} ${file.id}`,
+                    );
+                    const messages: ChunkMessage[] = [];
+                    while (!deque.isEmpty()) {
+                        messages.push(deque.removeFront());
+                    }
+                    updatedContent = revertOptimisticChunks(messages, updatedContent);
                 }
 
                 updatedContent = applyDiffs(updatedContent, chunksToPersist);
@@ -343,70 +344,6 @@ export class Syncinator {
         deque.removeFront();
     }
 
-    private handleOutOfSyncChunks(
-        file: File,
-        deque: Deque<ChunkMessage>,
-        initialContent: string,
-    ): string {
-        log.debug(`[onChunkMessage] chunk out of sync ${file.workspacePath} ${file.id}`);
-
-        const messages: ChunkMessage[] = [];
-        while (!deque.isEmpty()) {
-            messages.push(deque.removeFront());
-        }
-
-        let content = initialContent;
-        for (let i = messages.length - 1; i >= 0; i--) {
-            const cm = messages[i];
-            const appliedChunks: DiffChunk[] = [];
-
-            for (let j = cm.chunks.length - 1; j >= 0; j--) {
-                const chunk = cm.chunks[j];
-
-                let inverse = invertDiff(chunk);
-
-                for (const appliedChunk of appliedChunks) {
-                    inverse = transform(appliedChunk, inverse);
-                }
-
-                content = applyDiff(content, inverse);
-
-                appliedChunks.unshift(inverse);
-            }
-        }
-
-        return content;
-    }
-
-    private async getChunksToPersist(data: ChunkMessage, file: File): Promise<DiffChunk[]> {
-        const { fileId, chunks, version } = data;
-        const chunksToPersist: DiffChunk[] = [];
-
-        // fetch missing versions
-        if (file.version + 1 !== version) {
-            log.debug(`[onChunkMessage] missing intermediate msg ${file.workspacePath} ${file.id}`);
-            const operations = await this.apiClient.fetchOperations(fileId, file.version);
-
-            let currVersion = file.version;
-            for (const operation of operations) {
-                if (operation.version >= version) {
-                    break;
-                }
-
-                if (currVersion + 1 !== operation.version) {
-                    throw new Error(
-                        `Missing operation in history for file ${file.workspacePath} ${fileId}`,
-                    );
-                }
-
-                chunksToPersist.push(...operation.operation);
-                currVersion = operation.version;
-            }
-        }
-
-        chunksToPersist.push(...chunks);
-        return chunksToPersist;
-    }
     // ---------- END ---------
 
     // ---------- EventMessage ---------
