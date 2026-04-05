@@ -5,7 +5,7 @@ import { log } from "src/logger/logger";
 const OBSIDIAN_CACHE_POLL_COUNT = 10;
 const OBSIDIAN_CACHE_POLL_INTERVAL_MS = 100;
 
-import type { ApiClient, File, FileWithContent } from "./api/api";
+import type { ApiClient } from "./api/api";
 import {
     type ChunkMessage,
     type CursorMessage,
@@ -18,14 +18,15 @@ import { getChunksToPersist, revertOptimisticChunks } from "./chunkHandler";
 import { isSameChunkMessage } from "./chunkUtils";
 import { applyDiffs, computeDiff, type DiffChunk } from "./diff/diff";
 import { handleEventMessage } from "./eventHandler";
-import { type Deque, DequeRegistry } from "./messageQueue";
+import { DequeRegistry } from "./messageQueue";
 import type { FileDiff } from "./modals/conflict";
+import { reconcileFile } from "./reconcileHandler";
 import {
     snapshotFileChanged as handleSnapshotFileChanged,
     snapshotSelected as handleSnapshotSelected,
 } from "./snapshotHandler";
 import type { Disk } from "./storage/storage";
-import { generateSHA256Hash } from "./utils/crypto";
+import { SyncLock } from "./syncLock";
 import type {
     CursorEventMap,
     CursorPosition,
@@ -34,8 +35,16 @@ import type {
     Snapshot,
     SnapshotEventMap,
 } from "./utils/eventBus";
-import { isTextFile, isTextMime } from "./utils/mime";
+import { isTextFile } from "./utils/mime";
 import { sleep } from "./utils/sleep";
+
+function logSettledFailures(results: PromiseSettledResult<unknown>[], context: string): void {
+    for (const result of results) {
+        if (result.status === "rejected") {
+            log.error(`[${context}]`, result.reason);
+        }
+    }
+}
 
 export type ConflictResolution = "remote" | "local" | "merge";
 export interface Options {
@@ -58,9 +67,7 @@ export class Syncinator {
     private initialized = false;
     options: Options = { conflictResolution: "remote" };
     contracts: Contracts;
-    private modifyPendingModifications: Map<number, Promise<void>> = new Map();
-    private onChunkPendingModifications: Map<number, Promise<void>> = new Map();
-    private suppressNextModify: Set<string> = new Set();
+    private syncLock = new SyncLock();
 
     constructor(
         storage: Disk,
@@ -129,152 +136,31 @@ export class Syncinator {
                 this.wsClient.sendMessage(msg);
             });
 
-            await Promise.allSettled(filesToPush);
+            logSettledFailures(await Promise.allSettled(filesToPush), "pushLocalFiles");
         } catch (error) {
             log.error("error while pushing local files", error);
         }
     }
 
-    /**
-     * Publish to the server the local unsynchronized files
-     */
     async fetchRemoteFiles() {
         try {
             const files = await this.apiClient.fetchFiles();
             log.info(`fetched ${files.length} files from remote`);
             log.debug(files);
 
-            const fetchRemotePromises = files.map(async (file) => {
-                const exists = await this.storage.exists(file.workspacePath);
+            const reconcileDeps = {
+                apiClient: this.apiClient,
+                storage: this.storage,
+                fileCache: this.fileCache,
+                conflictResolution: this.options.conflictResolution,
+                diffModal: this.contracts.diffModal,
+                sendChunks: this.sendChunks.bind(this),
+            };
 
-                // Handle new files
-                if (!exists) {
-                    const remoteFile = await this.apiClient.fetchFile(file.id);
-                    this.fileCache.create(remoteFile);
-                    await this.storage.write(file.workspacePath, remoteFile.content);
-                    return;
-                }
-
-                // Handle binary
-                if (!isTextMime(file.mimeType)) {
-                    const localBinaryContent = await this.storage.readBinary(file.workspacePath);
-                    const localHash = await generateSHA256Hash(localBinaryContent);
-
-                    const fileToCache: FileWithContent = {
-                        ...file,
-                        content: localBinaryContent,
-                    };
-
-                    if (localHash !== file.hash) {
-                        const remoteFile = await this.apiClient.fetchFile(file.id);
-                        await this.storage.write(file.workspacePath, remoteFile.content, {
-                            force: true,
-                        });
-                        fileToCache.content = remoteFile.content;
-                    }
-
-                    this.fileCache.create(fileToCache);
-                    return;
-                }
-
-                // Handle Text
-                if (isTextMime(file.mimeType)) {
-                    const localTextContent = await this.storage.readText(file.workspacePath);
-                    const localHash = await generateSHA256Hash(localTextContent);
-
-                    const fileToCache: FileWithContent = {
-                        ...file,
-                        content: localTextContent,
-                    };
-
-                    if (localHash === file.hash) {
-                        this.fileCache.create(fileToCache);
-                        return;
-                    }
-
-                    const remoteFile = await this.apiClient.fetchFile(file.id);
-                    const localStat = await this.storage.stat(file.workspacePath);
-                    const localFileMtime = new Date(localStat?.mtime ?? localStat?.ctime ?? 0);
-                    const remoteFileMtime = new Date(remoteFile.updatedAt);
-
-                    if (typeof remoteFile.content !== "string") {
-                        log.error(
-                            `critical error during conflict, expected "string" got "${typeof remoteFile.content}"`,
-                        );
-                        return;
-                    }
-
-                    // Handle conflict
-                    switch (this.options.conflictResolution) {
-                        case "merge": {
-                            log.debug(
-                                `handling conflict on file "${file.workspacePath}", using merge tool`,
-                            );
-                            const mergedContent = await this.contracts.diffModal(
-                                file.workspacePath,
-                                {
-                                    content: localTextContent,
-                                    lastUpdate: localFileMtime,
-                                },
-                                {
-                                    content: remoteFile.content,
-                                    lastUpdate: remoteFileMtime,
-                                },
-                            );
-
-                            fileToCache.content = mergedContent;
-                            this.fileCache.create(fileToCache);
-
-                            await this.storage.write(file.workspacePath, mergedContent, {
-                                force: true,
-                            });
-
-                            const chunks = computeDiff(remoteFile.content, mergedContent);
-                            this.sendChunks(file.id, file.version, chunks);
-                            break;
-                        }
-                        case "local": {
-                            const chunks = computeDiff(remoteFile.content, localTextContent);
-                            if (chunks.length === 0) {
-                                return;
-                            }
-
-                            log.debug(
-                                `handling conflict on file "${file.workspacePath}", overwriting remote copy`,
-                            );
-
-                            fileToCache.content = localTextContent;
-                            fileToCache.updatedAt = new Date(localStat?.mtime ?? "").toISOString();
-                            this.fileCache.create(fileToCache);
-
-                            this.sendChunks(file.id, file.version, chunks);
-                            break;
-                        }
-                        case "remote": {
-                            log.debug(
-                                `handling conflict on file "${file.workspacePath}", overwriting local copy`,
-                            );
-                            fileToCache.content = remoteFile.content;
-                            this.fileCache.create(fileToCache);
-
-                            await this.storage.write(file.workspacePath, remoteFile.content, {
-                                force: true,
-                            });
-                            break;
-                        }
-                        default:
-                            log.warn(
-                                `conflict on file "${file.workspacePath}" not solved, invalid strategy ${this.options.conflictResolution}`,
-                            );
-                            break;
-                    }
-                    return;
-                }
-
-                log.warn(`unexpected reconciliation status for "${file.workspacePath}"`);
-            });
-
-            await Promise.allSettled(fetchRemotePromises);
+            logSettledFailures(
+                await Promise.allSettled(files.map((file) => reconcileFile(file, reconcileDeps))),
+                "fetchRemoteFiles",
+            );
         } catch (error) {
             log.error("error while fetching remote files", error);
         }
@@ -299,27 +185,20 @@ export class Syncinator {
             log.warn(`recived old message from ws: ${version} current ${file.version}`);
         }
 
-        const pending = this.modifyPendingModifications.get(fileId);
-        if (pending) {
-            await pending;
-        }
-
-        let resolveModification: () => void;
-        const modificationPromise = new Promise<void>((resolve) => {
-            resolveModification = resolve;
-        });
-        this.onChunkPendingModifications.set(fileId, modificationPromise);
+        await this.syncLock.waitForModify(fileId);
+        const release = this.syncLock.acquireChunkLock(fileId);
 
         try {
             let updatedContent = file.content;
             const deque = this.messageQueueRegistry.getDeque(fileId);
             const isAckMessage = !deque.isEmpty() && isSameChunkMessage(data, deque.peekFront());
             if (isAckMessage) {
-                this.handleAckMessage(file, deque);
+                log.debug(`[onChunkMessage] ack message ${file.workspacePath} ${file.id}`);
+                deque.removeFront();
             } else {
                 const chunksToPersist = await getChunksToPersist(data, file, this.apiClient);
                 updatedContent = await this.storage.readText(file.workspacePath);
-                // reverting the optimistic changes
+
                 if (!deque.isEmpty()) {
                     log.debug(
                         `[onChunkMessage] chunk out of sync ${file.workspacePath} ${file.id}`,
@@ -332,7 +211,7 @@ export class Syncinator {
                 }
 
                 updatedContent = applyDiffs(updatedContent, chunksToPersist);
-                this.suppressNextModify.add(file.workspacePath);
+                this.syncLock.suppressModify(file.workspacePath);
                 await this.storage.modifyText(file.workspacePath, updatedContent);
             }
 
@@ -342,15 +221,8 @@ export class Syncinator {
         } catch (error) {
             log.error(error);
         } finally {
-            // biome-ignore lint/style/noNonNullAssertion: <explanation>
-            resolveModification!();
-            this.onChunkPendingModifications.delete(fileId);
+            release();
         }
-    }
-
-    private handleAckMessage(file: File, deque: Deque<ChunkMessage>): void {
-        log.debug(`[onChunkMessage] ack message ${file.workspacePath} ${file.id}`);
-        deque.removeFront();
     }
 
     // ---------- END ---------
@@ -435,8 +307,7 @@ export class Syncinator {
     private async modify({ file }: { file: TAbstractFile }) {
         log.debug("[event]: modify", file);
 
-        if (this.suppressNextModify.has(file.path)) {
-            this.suppressNextModify.delete(file.path);
+        if (this.syncLock.consumeSuppression(file.path)) {
             return;
         }
 
@@ -450,22 +321,10 @@ export class Syncinator {
             return;
         }
 
-        const pendingChunk = this.onChunkPendingModifications.get(cachedFile.id);
-        if (pendingChunk) {
-            await pendingChunk;
-        }
+        await this.syncLock.waitForChunk(cachedFile.id);
+        await this.syncLock.waitForModify(cachedFile.id);
 
-        const pendingModify = this.modifyPendingModifications.get(cachedFile.id);
-        if (pendingModify) {
-            await pendingModify;
-        }
-
-        let resolveModification: () => void;
-        const modificationPromise = new Promise<void>((resolve) => {
-            resolveModification = resolve;
-        });
-
-        this.modifyPendingModifications.set(cachedFile.id, modificationPromise);
+        const release = this.syncLock.acquireModifyLock(cachedFile.id);
 
         try {
             const newContent = await this.storage.readText(file.path);
@@ -483,9 +342,7 @@ export class Syncinator {
                 this.contracts.cursorEventBus.emit("trigger-cursor-update", file.path);
             }
         } finally {
-            // biome-ignore lint/style/noNonNullAssertion: <explanation>
-            resolveModification!();
-            this.modifyPendingModifications.delete(cachedFile.id);
+            release();
         }
     }
 
@@ -521,10 +378,13 @@ export class Syncinator {
         } else {
             log.warn(`missing file for deletion: "${file.path}", probably a folder`);
 
-            await Promise.allSettled(
-                this.fileCache
-                    .find((f) => f.workspacePath.startsWith(file.path + path.sep))
-                    .map((f) => deleteFile(f.id)),
+            logSettledFailures(
+                await Promise.allSettled(
+                    this.fileCache
+                        .find((f) => f.workspacePath.startsWith(file.path + path.sep))
+                        .map((f) => deleteFile(f.id)),
+                ),
+                "delete folder",
             );
 
             const msg: EventMessage = {
@@ -593,7 +453,7 @@ export class Syncinator {
                 }
             });
 
-            await Promise.allSettled(renamePromises);
+            logSettledFailures(await Promise.allSettled(renamePromises), "rename folder");
 
             const msg: EventMessage = {
                 type: MessageType.Rename,
