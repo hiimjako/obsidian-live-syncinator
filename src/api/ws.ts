@@ -47,6 +47,8 @@ type RetryQueueItem = {
     timestamp: number;
 };
 
+const DEFAULT_MAX_RETRY_ATTEMPTS = 3;
+
 export class WsClient {
     private ws: WebSocket | null = null;
     private domain = "";
@@ -212,7 +214,7 @@ export class WsClient {
 
         for (const item of currentQueue) {
             try {
-                if (item.attempts < (this.options.maxRetryAttempts ?? 3)) {
+                if (item.attempts < (this.options.maxRetryAttempts ?? DEFAULT_MAX_RETRY_ATTEMPTS)) {
                     await this.sendMessageWithRetry(item.message, item.attempts);
                 } else {
                     log.error(

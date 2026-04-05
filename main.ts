@@ -16,6 +16,10 @@ import { HttpClient } from "./src/api/http";
 import { WsClient } from "./src/api/ws";
 import { DEFAULT_SETTINGS, type PluginSettings, SettingTab } from "./src/settings";
 
+const TOKEN_REFRESH_INTERVAL_MS = 5 * 60 * 1000;
+const CURSOR_INACTIVITY_TIMEOUT_MS = 5_000;
+const STARTUP_DELAY_MS = 2000;
+
 export default class Syncinator extends Plugin {
     settings: PluginSettings = DEFAULT_SETTINGS;
     private wsClient: WsClient;
@@ -125,7 +129,7 @@ export default class Syncinator extends Plugin {
 
         await this.refreshToken();
         this.registerInterval(
-            window.setInterval(async () => await this.refreshToken(), 5 * 60 * 1000),
+            window.setInterval(async () => await this.refreshToken(), TOKEN_REFRESH_INTERVAL_MS),
         );
 
         this.registerView(
@@ -138,7 +142,7 @@ export default class Syncinator extends Plugin {
             this.cursorEnv = new CursorEnv(
                 this.cursorEventBus,
                 () => this.app.workspace.getActiveViewOfType(MarkdownView),
-                5_000,
+                CURSOR_INACTIVITY_TIMEOUT_MS,
             );
         }
 
@@ -146,7 +150,7 @@ export default class Syncinator extends Plugin {
         setTimeout(async () => {
             await this.registerSyncinator();
             new Notice("Obsidian Live Syncinator inizialized");
-        }, 2000);
+        }, STARTUP_DELAY_MS);
     }
 
     onunload() {

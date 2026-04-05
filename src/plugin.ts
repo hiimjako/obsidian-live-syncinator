@@ -1,6 +1,10 @@
 import type { TAbstractFile } from "obsidian";
 import path from "path-browserify";
 import { log } from "src/logger/logger";
+
+const OBSIDIAN_CACHE_POLL_COUNT = 10;
+const OBSIDIAN_CACHE_POLL_INTERVAL_MS = 100;
+
 import type { ApiClient, File, FileWithContent } from "./api/api";
 import {
     type ChunkMessage,
@@ -600,7 +604,7 @@ export class Syncinator {
             this.wsClient.sendMessage(msg);
 
             // give time to obsidian to update cache
-            for (let i = 0; i < 10; i++) {
+            for (let i = 0; i < OBSIDIAN_CACHE_POLL_COUNT; i++) {
                 const filesPostRename = await this.storage.listFiles({
                     prefix: oldWorkspacePath,
                 });
@@ -608,7 +612,7 @@ export class Syncinator {
                     this.storage.delete(oldPath, { force: true });
                     break;
                 }
-                await sleep(100);
+                await sleep(OBSIDIAN_CACHE_POLL_INTERVAL_MS);
             }
         }
     }
