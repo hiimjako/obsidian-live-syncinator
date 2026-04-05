@@ -1,5 +1,6 @@
 import assert from "node:assert";
 import { describe, test } from "node:test";
+import type { TFile } from "obsidian";
 import type { FileWithContent } from "./api/api";
 import { type EventMessage, MessageType } from "./api/ws";
 import { FileCache } from "./cache";
@@ -40,7 +41,7 @@ function makeDeps() {
                 delete: async (path: string) => {
                     deletedPaths.push(path);
                 },
-                listFiles: async () => [] as { path: string }[],
+                listFiles: async () => [] as TFile[],
                 rename: async (from: string, to: string) => {
                     renamedPaths.push({ from, to });
                 },
@@ -132,8 +133,8 @@ describe("handleEventMessage", () => {
             );
 
             deps.storage.listFiles = async () => [
-                { path: "folder/a.md" },
-                { path: "folder/b.md" },
+                { path: "folder/a.md" } as TFile,
+                { path: "folder/b.md" } as TFile,
             ];
 
             const event = createEvent({
