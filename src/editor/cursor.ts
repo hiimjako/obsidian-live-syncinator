@@ -16,6 +16,7 @@ import {
     removeCursorEffect,
     updateCursorEffect,
 } from "./cursorState";
+
 export {
     type CursorState,
     clearStaleEffect,

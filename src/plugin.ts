@@ -13,9 +13,9 @@ import { FileCache } from "./cache";
 import { getChunksToPersist, isSameChunkMessage, revertOptimisticChunks } from "./chunkHandler";
 import { applyDiffs, computeDiff, type DiffChunk } from "./diff/diff";
 import {
+    handleEventMessage,
     OBSIDIAN_CACHE_POLL_COUNT,
     OBSIDIAN_CACHE_POLL_INTERVAL_MS,
-    handleEventMessage,
 } from "./eventHandler";
 import { DequeRegistry } from "./messageQueue";
 import type { FileDiff } from "./modals/conflict";

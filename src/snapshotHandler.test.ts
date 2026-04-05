@@ -1,6 +1,6 @@
 import assert from "node:assert";
 import { describe, test } from "node:test";
-import type { FileWithContent, Snapshot as ApiSnapshot, SnapshotWithContent } from "./api/api";
+import type { Snapshot as ApiSnapshot, FileWithContent, SnapshotWithContent } from "./api/api";
 import { FileCache } from "./cache";
 import type { DiffChunk } from "./diff/diff";
 import { handleSnapshotFileChanged, handleSnapshotSelected } from "./snapshotHandler";
@@ -30,11 +30,14 @@ describe("handleSnapshotFileChanged", () => {
             emitted = true;
         });
 
-        await handleSnapshotFileChanged({ path: "missing.md" }, {
-            fileCache: new FileCache(),
-            apiClient: { fetchSnapshots: async () => [] },
-            snapshotEventBus: bus,
-        });
+        await handleSnapshotFileChanged(
+            { path: "missing.md" },
+            {
+                fileCache: new FileCache(),
+                apiClient: { fetchSnapshots: async () => [] },
+                snapshotEventBus: bus,
+            },
+        );
 
         assert.equal(emitted, false);
     });
@@ -63,11 +66,14 @@ describe("handleSnapshotFileChanged", () => {
             emittedData = data;
         });
 
-        await handleSnapshotFileChanged({ path: "test.md" }, {
-            fileCache,
-            apiClient: { fetchSnapshots: async () => apiSnapshots },
-            snapshotEventBus: bus,
-        });
+        await handleSnapshotFileChanged(
+            { path: "test.md" },
+            {
+                fileCache,
+                apiClient: { fetchSnapshots: async () => apiSnapshots },
+                snapshotEventBus: bus,
+            },
+        );
 
         assert.equal(emittedData.length, 1);
         assert.equal(emittedData[0].version, 3);
@@ -84,7 +90,7 @@ describe("handleSnapshotSelected", () => {
             {
                 fileCache: new FileCache(),
                 apiClient: {
-                    fetchSnapshot: async () => ({} as SnapshotWithContent),
+                    fetchSnapshot: async () => ({}) as SnapshotWithContent,
                 },
                 diffModal: async () => {
                     diffCalled = true;

@@ -125,12 +125,8 @@ describe("handleEventMessage", () => {
 
         test("should delete folder and all cached files within it", async () => {
             const { deps, deletedPaths } = makeDeps();
-            deps.fileCache.create(
-                makeFileWithContent({ id: 1, workspacePath: "folder/a.md" }),
-            );
-            deps.fileCache.create(
-                makeFileWithContent({ id: 2, workspacePath: "folder/b.md" }),
-            );
+            deps.fileCache.create(makeFileWithContent({ id: 1, workspacePath: "folder/a.md" }));
+            deps.fileCache.create(makeFileWithContent({ id: 2, workspacePath: "folder/b.md" }));
 
             deps.storage.listFiles = async () => [
                 { path: "folder/a.md" } as TFile,

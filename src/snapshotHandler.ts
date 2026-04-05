@@ -12,7 +12,10 @@ interface SnapshotFileChangedDeps {
     snapshotEventBus: EventBus<SnapshotEventMap>;
 }
 
-export async function handleSnapshotFileChanged(data: { path: string }, deps: SnapshotFileChangedDeps) {
+export async function handleSnapshotFileChanged(
+    data: { path: string },
+    deps: SnapshotFileChangedDeps,
+) {
     log.debug("[snapshot]: file-changed", data);
     const cachedFile = deps.fileCache.getByPath(data.path);
     if (cachedFile == null) {
