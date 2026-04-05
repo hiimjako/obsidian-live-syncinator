@@ -12,7 +12,7 @@ interface SnapshotFileChangedDeps {
     snapshotEventBus: EventBus<SnapshotEventMap>;
 }
 
-export async function snapshotFileChanged(data: { path: string }, deps: SnapshotFileChangedDeps) {
+export async function handleSnapshotFileChanged(data: { path: string }, deps: SnapshotFileChangedDeps) {
     log.debug("[snapshot]: file-changed", data);
     const cachedFile = deps.fileCache.getByPath(data.path);
     if (cachedFile == null) {
@@ -44,7 +44,7 @@ interface SnapshotSelectedDeps {
     sendChunks: (fileId: number, version: number, chunks: DiffChunk[]) => void;
 }
 
-export async function snapshotSelected(snapshot: Snapshot, deps: SnapshotSelectedDeps) {
+export async function handleSnapshotSelected(snapshot: Snapshot, deps: SnapshotSelectedDeps) {
     log.debug("[snapshot]: snapshot-selected", snapshot);
     const cachedFile = deps.fileCache.getById(snapshot.fileId);
     if (cachedFile == null) {

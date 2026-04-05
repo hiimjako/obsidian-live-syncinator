@@ -20,10 +20,7 @@ import {
 import { DequeRegistry } from "./messageQueue";
 import type { FileDiff } from "./modals/conflict";
 import { type ConflictResolution, reconcileFile } from "./reconcileHandler";
-import {
-    snapshotFileChanged as handleSnapshotFileChanged,
-    snapshotSelected as handleSnapshotSelected,
-} from "./snapshotHandler";
+import { handleSnapshotFileChanged, handleSnapshotSelected } from "./snapshotHandler";
 import type { Disk } from "./storage/storage";
 import { SyncLock } from "./syncLock";
 import type {
