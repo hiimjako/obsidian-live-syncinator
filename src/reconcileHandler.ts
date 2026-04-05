@@ -3,10 +3,11 @@ import type { ApiClient, File, FileWithContent } from "./api/api";
 import type { FileCache } from "./cache";
 import { computeDiff, type DiffChunk } from "./diff/diff";
 import type { FileDiff } from "./modals/conflict";
-import type { ConflictResolution } from "./plugin";
 import type { Disk } from "./storage/storage";
 import { generateSHA256Hash } from "./utils/crypto";
 import { isTextMime } from "./utils/mime";
+
+export type ConflictResolution = "remote" | "local" | "merge";
 
 interface ReconcileDeps {
     apiClient: Pick<ApiClient, "fetchFile">;

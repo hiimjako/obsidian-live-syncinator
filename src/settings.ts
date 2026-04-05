@@ -2,7 +2,7 @@ import type { App } from "obsidian";
 import { Notice, PluginSettingTab, Setting } from "obsidian";
 import type Syncinator from "../main";
 import { LogLevel, type LogLevelType, log } from "./logger/logger";
-import type { ConflictResolution } from "./plugin";
+import type { ConflictResolution } from "./reconcileHandler";
 
 export interface PluginSettings {
     domain: string;

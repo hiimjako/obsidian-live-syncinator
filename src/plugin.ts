@@ -19,7 +19,7 @@ import { applyDiffs, computeDiff, type DiffChunk } from "./diff/diff";
 import { handleEventMessage } from "./eventHandler";
 import { DequeRegistry } from "./messageQueue";
 import type { FileDiff } from "./modals/conflict";
-import { reconcileFile } from "./reconcileHandler";
+import { type ConflictResolution, reconcileFile } from "./reconcileHandler";
 import {
     snapshotFileChanged as handleSnapshotFileChanged,
     snapshotSelected as handleSnapshotSelected,
@@ -45,7 +45,6 @@ function logSettledFailures(results: PromiseSettledResult<unknown>[], context: s
     }
 }
 
-export type ConflictResolution = "remote" | "local" | "merge";
 export interface Options {
     conflictResolution: ConflictResolution;
 }
