@@ -167,8 +167,8 @@ export class Disk {
         }
 
         return await this.vault.process(file, (data) => {
-            const cp = Array.from(data);
-            return cp.slice(0, start).join("") + str + cp.slice(start).join("");
+            const codepoints = Array.from(data);
+            return codepoints.slice(0, start).join("") + str + codepoints.slice(start).join("");
         });
     }
 
@@ -183,8 +183,8 @@ export class Disk {
         }
 
         return await this.vault.process(file, (data) => {
-            const cp = Array.from(data);
-            return cp.slice(0, start).join("") + cp.slice(start + length).join("");
+            const codepoints = Array.from(data);
+            return codepoints.slice(0, start).join("") + codepoints.slice(start + length).join("");
         });
     }
 

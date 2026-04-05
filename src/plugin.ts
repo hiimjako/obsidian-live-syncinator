@@ -74,13 +74,13 @@ export class Syncinator {
         apiClient: ApiClient,
         wsClient: WsClient,
         contracts: Contracts,
-        opts: Options,
+        options: Options,
     ) {
         this.storage = storage;
         this.apiClient = apiClient;
         this.wsClient = wsClient;
         this.contracts = contracts;
-        this.options = opts;
+        this.options = options;
 
         this.wsClient.onChunkMessage(this.handleChunkMessage.bind(this));
         this.wsClient.onEventMessage(this.handleEventMessage.bind(this));
