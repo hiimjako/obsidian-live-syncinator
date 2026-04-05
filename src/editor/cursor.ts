@@ -1,170 +1,227 @@
-import type { Editor, MarkdownView } from "obsidian";
+import { type Extension, RangeSetBuilder, StateEffect, StateField } from "@codemirror/state";
+import {
+    Decoration,
+    type DecorationSet,
+    type EditorView,
+    ViewPlugin,
+    type ViewUpdate,
+    WidgetType,
+} from "@codemirror/view";
+import { editorInfoField } from "obsidian";
 import { log } from "src/logger/logger";
 import type { CursorEventMap, EventBus } from "src/utils/eventBus";
 
-export class CursorEnv {
-    private cursors = new Map<string, UserCursor>();
-    private cursorTimers = new Map<string, number>();
-    private inactivityTimeoutMs: number;
+interface CursorState {
+    id: string;
+    path: string;
+    label: string;
+    color: string;
+    line: number;
+    ch: number;
+    lastUpdate: number;
+}
 
-    constructor(
-        bus: EventBus<CursorEventMap>,
-        getActiveEditor: () => MarkdownView | null,
-        inactivityTimeoutMs: number,
-    ) {
-        this.inactivityTimeoutMs = inactivityTimeoutMs;
+const updateCursorEffect = StateEffect.define<CursorState>();
+const removeCursorEffect = StateEffect.define<string>();
+const clearStaleEffect = StateEffect.define<number>();
 
-        bus.on("remote-cursor-update", async (data) => {
-            const activeEditor = getActiveEditor();
-            if (activeEditor === null) {
-                return;
-            }
+const remoteCursorField = StateField.define<Map<string, CursorState>>({
+    create() {
+        return new Map();
+    },
+    update(cursors, tr) {
+        let changed = false;
+        let next = cursors;
 
-            if (activeEditor.file?.path !== data.path) {
-                this.removeCursor(data.id);
-                return;
-            }
-
-            if (!this.cursors.has(data.id)) {
-                this.cursors.set(data.id, new UserCursor(data.path, data.label, data.color));
-            }
-
-            const cursor = this.cursors.get(data.id);
-
-            if (cursor?.positionAtTextCoordinates(activeEditor.editor, data.line, data.ch)) {
-                this.resetCursorTimer(data.id);
-            }
-        });
-
-        bus.on("local-cursor-update", async (data) => {
-            const keys = this.cursors.keys();
-            for (const key of keys) {
-                const cursor = this.cursors.get(key);
-                if (!cursor || cursor.path === data.path) {
-                    continue;
+        for (const effect of tr.effects) {
+            if (effect.is(updateCursorEffect)) {
+                if (!changed) {
+                    next = new Map(cursors);
+                    changed = true;
                 }
-                cursor.destroy();
-                this.cursors.delete(key);
+                next.set(effect.value.id, effect.value);
+            } else if (effect.is(removeCursorEffect)) {
+                if (cursors.has(effect.value)) {
+                    if (!changed) {
+                        next = new Map(cursors);
+                        changed = true;
+                    }
+                    next.delete(effect.value);
+                }
+            } else if (effect.is(clearStaleEffect)) {
+                const threshold = effect.value;
+                for (const [id, cursor] of cursors) {
+                    if (cursor.lastUpdate < threshold) {
+                        if (!changed) {
+                            next = new Map(cursors);
+                            changed = true;
+                        }
+                        next.delete(id);
+                    }
+                }
             }
-        });
+        }
+
+        return next;
+    },
+});
+
+class RemoteCursorWidget extends WidgetType {
+    constructor(
+        readonly label: string,
+        readonly color: string,
+    ) {
+        super();
     }
 
-    private resetCursorTimer(cursorId: string) {
-        if (this.cursorTimers.has(cursorId)) {
-            window.clearTimeout(this.cursorTimers.get(cursorId));
-        }
-
-        const timerId = window.setTimeout(() => {
-            this.removeCursor(cursorId);
-        }, this.inactivityTimeoutMs);
-
-        this.cursorTimers.set(cursorId, timerId);
+    toDOM(): HTMLElement {
+        const el = document.createElement("span");
+        el.className = "cursor-name-box";
+        el.setAttribute("contenteditable", "false");
+        el.textContent = this.label;
+        el.style.color = this.color;
+        return el;
     }
 
-    private removeCursor(cursorId: string) {
-        log.debug(`deleting cursor: ${cursorId}`);
-        if (this.cursorTimers.has(cursorId)) {
-            window.clearTimeout(this.cursorTimers.get(cursorId));
-            this.cursorTimers.delete(cursorId);
-        }
-
-        const cursor = this.cursors.get(cursorId);
-        if (cursor) {
-            cursor.destroy();
-            this.cursors.delete(cursorId);
-        }
+    eq(other: RemoteCursorWidget): boolean {
+        return this.label === other.label && this.color === other.color;
     }
 
-    close() {
-        for (const timerId of this.cursorTimers.values()) {
-            window.clearTimeout(timerId);
-        }
+    get estimatedHeight(): number {
+        return -1;
+    }
 
-        for (const cursor of this.cursors.values()) {
-            cursor.destroy();
-        }
-
-        this.cursorTimers.clear();
-        this.cursors.clear();
-
-        log.debug("CursorEnv closed, all resources cleaned up");
+    ignoreEvent(): boolean {
+        return true;
     }
 }
 
-export class UserCursor {
-    cursorElement: HTMLElement | null = null;
-    path: string;
+function buildDecorations(view: EditorView): DecorationSet {
+    const cursors = view.state.field(remoteCursorField);
+    const widgets: { pos: number; widget: RemoteCursorWidget }[] = [];
 
-    constructor(path: string, label: string, color: `#${string}`) {
-        this.path = path;
+    for (const cursor of cursors.values()) {
+        const doc = view.state.doc;
+        if (cursor.line + 1 > doc.lines) continue;
 
-        this.cursorElement = document.createElement("div");
-        this.cursorElement.classList.add("cursor-name-box");
-        this.cursorElement.setAttribute("contenteditable", "false");
-        this.cursorElement.textContent = label;
-        this.cursorElement.style.color = color;
+        const docLine = doc.line(cursor.line + 1);
+        const clampedCh = Math.min(cursor.ch, docLine.length);
+        const pos = docLine.from + clampedCh;
 
-        this.hide();
+        if (pos > doc.length) continue;
+
+        widgets.push({ pos, widget: new RemoteCursorWidget(cursor.label, cursor.color) });
     }
 
-    hide() {
-        if (!this.cursorElement) return;
-        this.cursorElement.style.display = "none";
+    widgets.sort((a, b) => a.pos - b.pos);
+
+    const builder = new RangeSetBuilder<Decoration>();
+    for (const { pos, widget } of widgets) {
+        builder.add(pos, pos, Decoration.widget({ widget, side: 1 }));
     }
+    return builder.finish();
+}
 
-    show() {
-        if (!this.cursorElement) return;
-        this.cursorElement.style.display = "block";
+// Active EditorViews tracked by the ViewPlugin, keyed by file path.
+// CursorEnv dispatches effects to these views without needing editor.cm.
+const activeViews = new Map<EditorView, string>();
+
+function getViewForPath(path: string): EditorView | undefined {
+    for (const [view, viewPath] of activeViews) {
+        if (viewPath === path) return view;
     }
+    return undefined;
+}
 
-    positionAtTextCoordinates(editor: Editor, line: number, ch: number): boolean {
-        if (!this.cursorElement) return false;
+const remoteCursorPlugin = ViewPlugin.fromClass(
+    class {
+        decorations: DecorationSet;
 
-        try {
-            // @ts-expect-error accessing internal CM6 EditorView
-            const view = editor.cm;
-            if (!view) return false;
-
-            const doc = view.state.doc;
-            if (line + 1 > doc.lines) return false;
-
-            const docLine = doc.line(line + 1);
-            const clampedCh = Math.min(ch, docLine.length);
-            const pos = docLine.from + clampedCh;
-
-            const coords = view.coordsAtPos(pos);
-            if (!coords) {
-                this.hide();
-                return true;
-            }
-
-            // Attach to scrollDOM (NOT contentDOM) so CM6 doesn't
-            // interpret the label text as document content.
-            const scrollDom = view.scrollDOM as HTMLElement;
-            if (this.cursorElement.parentNode !== scrollDom) {
-                scrollDom.appendChild(this.cursorElement);
-            }
-
-            const scrollRect = scrollDom.getBoundingClientRect();
-            const relativeLeft = coords.left - scrollRect.left + scrollDom.scrollLeft;
-            const relativeTop = coords.bottom - scrollRect.top + scrollDom.scrollTop;
-
-            this.cursorElement.style.position = "absolute";
-            this.cursorElement.style.left = `${relativeLeft}px`;
-            this.cursorElement.style.top = `${relativeTop}px`;
-            this.show();
-
-            return true;
-        } catch (error) {
-            log.debug("Failed to position cursor:", error);
-            return false;
+        constructor(readonly view: EditorView) {
+            this.decorations = buildDecorations(view);
+            this.trackView();
         }
+
+        update(update: ViewUpdate) {
+            this.trackView();
+
+            if (
+                update.docChanged ||
+                update.transactions.some((tr) =>
+                    tr.effects.some(
+                        (e) =>
+                            e.is(updateCursorEffect) ||
+                            e.is(removeCursorEffect) ||
+                            e.is(clearStaleEffect),
+                    ),
+                )
+            ) {
+                this.decorations = buildDecorations(update.view);
+            }
+        }
+
+        destroy() {
+            activeViews.delete(this.view);
+        }
+
+        private trackView() {
+            const info = this.view.state.field(editorInfoField);
+            const path = info?.file?.path ?? "";
+            activeViews.set(this.view, path);
+        }
+    },
+    { decorations: (v) => v.decorations },
+);
+
+export const remoteCursorExtension: Extension = [remoteCursorField, remoteCursorPlugin];
+
+export class CursorEnv {
+    private inactivityTimer: number | undefined;
+
+    constructor(bus: EventBus<CursorEventMap>, inactivityTimeoutMs: number) {
+        bus.on("remote-cursor-update", async (data) => {
+            const view = getViewForPath(data.path);
+            if (!view) return;
+
+            view.dispatch({
+                effects: updateCursorEffect.of({
+                    ...data,
+                    lastUpdate: Date.now(),
+                }),
+            });
+            this.resetInactivityTimer(inactivityTimeoutMs);
+        });
+
+        bus.on("local-cursor-update", async (data) => {
+            // Remove cursors that belong to files other than the current one
+            for (const [view] of activeViews) {
+                const cursors = view.state.field(remoteCursorField);
+                for (const [id, cursor] of cursors) {
+                    if (cursor.path !== data.path) {
+                        view.dispatch({ effects: removeCursorEffect.of(id) });
+                    }
+                }
+            }
+        });
     }
 
-    destroy() {
-        if (this.cursorElement?.parentNode) {
-            this.cursorElement.parentNode.removeChild(this.cursorElement);
-            this.cursorElement = null;
+    private resetInactivityTimer(timeoutMs: number) {
+        if (this.inactivityTimer !== undefined) {
+            window.clearTimeout(this.inactivityTimer);
         }
+
+        this.inactivityTimer = window.setTimeout(() => {
+            const threshold = Date.now() - timeoutMs;
+            for (const [view] of activeViews) {
+                view.dispatch({ effects: clearStaleEffect.of(threshold) });
+            }
+        }, timeoutMs);
+    }
+
+    close() {
+        if (this.inactivityTimer !== undefined) {
+            window.clearTimeout(this.inactivityTimer);
+        }
+        log.debug("CursorEnv closed");
     }
 }

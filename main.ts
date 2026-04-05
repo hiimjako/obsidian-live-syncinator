@@ -1,5 +1,5 @@
-import { MarkdownView, Notice, Plugin } from "obsidian";
-import { CursorEnv } from "src/editor/cursor";
+import { Notice, Plugin } from "obsidian";
+import { CursorEnv, remoteCursorExtension } from "src/editor/cursor";
 import { log } from "src/logger/logger";
 import { DiffModal, type FileDiff } from "src/modals/conflict";
 import { Syncinator as SyncinatorPlugin } from "src/plugin";
@@ -139,11 +139,8 @@ export default class Syncinator extends Plugin {
         this.app.workspace.onLayoutReady(() => this.activateSnapshotView());
 
         if (this.settings.showCursors) {
-            this.cursorEnv = new CursorEnv(
-                this.cursorEventBus,
-                () => this.app.workspace.getActiveViewOfType(MarkdownView),
-                CURSOR_INACTIVITY_TIMEOUT_MS,
-            );
+            this.registerEditorExtension(remoteCursorExtension);
+            this.cursorEnv = new CursorEnv(this.cursorEventBus, CURSOR_INACTIVITY_TIMEOUT_MS);
         }
 
         // Deferred startup
