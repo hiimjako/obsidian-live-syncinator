@@ -170,6 +170,66 @@ describe("reconcileFile", () => {
         assert.equal(sentChunks[0].fileId, 1);
     });
 
+    test("should fetch and write binary file when hashes differ", async () => {
+        const localBinary = new TextEncoder().encode("local binary").buffer;
+        const remoteBinary = new TextEncoder().encode("remote binary").buffer;
+
+        const writtenFiles: { path: string; content: string | ArrayBuffer }[] = [];
+        const { deps } = makeDeps({
+            apiClient: {
+                fetchFile: async () => ({
+                    ...makeFile({ mimeType: "application/octet-stream" }),
+                    content: remoteBinary,
+                }),
+            },
+            storage: {
+                exists: async () => true,
+                readBinary: async () => localBinary,
+                readText: async () => "",
+                write: async (path: string, content: string | ArrayBuffer) => {
+                    writtenFiles.push({ path, content });
+                },
+                stat: async () => ({ type: "file" as const, ctime: 0, mtime: 0, size: 0 }),
+            },
+        });
+
+        const file = makeFile({ mimeType: "application/octet-stream", hash: "different" });
+        await reconcileFile(file, deps);
+
+        const cached = deps.fileCache.getById(1);
+        assert.ok(cached);
+        assert.equal(cached.content, remoteBinary);
+        assert.equal(writtenFiles.length, 1);
+        assert.equal(writtenFiles[0].content, remoteBinary);
+    });
+
+    test("should return early when remote text content is not a string", async () => {
+        const { deps, sentChunks, writtenFiles } = makeDeps({
+            apiClient: {
+                fetchFile: async () => ({
+                    ...makeFile(),
+                    content: new ArrayBuffer(0),
+                }),
+            },
+            storage: {
+                exists: async () => true,
+                readBinary: async () => new ArrayBuffer(0),
+                readText: async () => "local content",
+                write: async (p: string, c: string) => {
+                    writtenFiles.push({ path: p, content: c });
+                },
+                stat: async () => ({ type: "file" as const, ctime: 0, mtime: 0, size: 0 }),
+            },
+        });
+
+        const file = makeFile({ hash: "different" });
+        await reconcileFile(file, deps);
+
+        assert.equal(deps.fileCache.getById(1), undefined);
+        assert.equal(sentChunks.length, 0);
+        assert.equal(writtenFiles.length, 0);
+    });
+
     test("should use diffModal on 'merge' conflict", async () => {
         let diffModalCalled = false;
 
