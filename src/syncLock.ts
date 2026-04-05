@@ -3,6 +3,12 @@
  *
  * - Only one chunk or modify operation runs at a time per file
  * - suppressNextModify prevents echo loops when we write to disk from a chunk
+ *
+ * INVARIANT: acquireChunkLock/acquireModifyLock are NOT re-entrant for the same
+ * fileId. A second acquire overwrites the first lock's promise, silently
+ * releasing it. Callers must serialize per-fileId access externally (chunk
+ * messages go through AsyncMessageQueue; modify events are single-threaded
+ * by the Obsidian vault event loop). Always call waitFor* before acquire*.
  */
 export class SyncLock {
     private chunkLocks = new Map<number, Promise<void>>();
