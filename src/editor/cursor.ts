@@ -222,6 +222,15 @@ export class CursorEnv {
         if (this.inactivityTimer !== undefined) {
             window.clearTimeout(this.inactivityTimer);
         }
+
+        for (const [view] of activeViews) {
+            const cursors = view.state.field(remoteCursorField);
+            for (const id of cursors.keys()) {
+                view.dispatch({ effects: removeCursorEffect.of(id) });
+            }
+        }
+        activeViews.clear();
+
         log.debug("CursorEnv closed");
     }
 }
