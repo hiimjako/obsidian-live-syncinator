@@ -1,10 +1,6 @@
 import type { TAbstractFile } from "obsidian";
 import path from "path-browserify";
 import { log } from "src/logger/logger";
-
-const OBSIDIAN_CACHE_POLL_COUNT = 10;
-const OBSIDIAN_CACHE_POLL_INTERVAL_MS = 100;
-
 import type { ApiClient } from "./api/api";
 import {
     type ChunkMessage,
@@ -16,7 +12,11 @@ import {
 import { FileCache } from "./cache";
 import { getChunksToPersist, isSameChunkMessage, revertOptimisticChunks } from "./chunkHandler";
 import { applyDiffs, computeDiff, type DiffChunk } from "./diff/diff";
-import { handleEventMessage } from "./eventHandler";
+import {
+    OBSIDIAN_CACHE_POLL_COUNT,
+    OBSIDIAN_CACHE_POLL_INTERVAL_MS,
+    handleEventMessage,
+} from "./eventHandler";
 import { DequeRegistry } from "./messageQueue";
 import type { FileDiff } from "./modals/conflict";
 import { type ConflictResolution, reconcileFile } from "./reconcileHandler";

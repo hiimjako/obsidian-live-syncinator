@@ -6,8 +6,8 @@ import type { FileCache } from "./cache";
 import type { Disk } from "./storage/storage";
 import { sleep } from "./utils/sleep";
 
-const OBSIDIAN_CACHE_POLL_COUNT = 10;
-const OBSIDIAN_CACHE_POLL_INTERVAL_MS = 100;
+export const OBSIDIAN_CACHE_POLL_COUNT = 10;
+export const OBSIDIAN_CACHE_POLL_INTERVAL_MS = 100;
 
 interface EventHandlerDeps {
     apiClient: Pick<ApiClient, "fetchFile">;
