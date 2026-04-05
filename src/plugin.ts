@@ -14,8 +14,7 @@ import {
     type WsClient,
 } from "./api/ws";
 import { FileCache } from "./cache";
-import { getChunksToPersist, revertOptimisticChunks } from "./chunkHandler";
-import { isSameChunkMessage } from "./chunkUtils";
+import { getChunksToPersist, isSameChunkMessage, revertOptimisticChunks } from "./chunkHandler";
 import { applyDiffs, computeDiff, type DiffChunk } from "./diff/diff";
 import { handleEventMessage } from "./eventHandler";
 import { DequeRegistry } from "./messageQueue";
